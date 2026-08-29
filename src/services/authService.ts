@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
 import { storageService } from '@/services/storageService';
 
@@ -18,7 +19,23 @@ export type Profile = {
   created_at?: string;
 };
 
+const PROFILE_STORAGE_KEY = 'supafarm_profile';
+
 let currentProfileState: Profile | null = null;
+
+async function saveProfileToStorage(profile: Profile) {
+  try {
+    await AsyncStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
+  } catch (_) {}
+}
+
+async function loadProfileFromStorage(): Promise<Profile | null> {
+  try {
+    const raw = await AsyncStorage.getItem(PROFILE_STORAGE_KEY);
+    if (raw) return JSON.parse(raw) as Profile;
+  } catch (_) {}
+  return null;
+}
 
 export const authService = {
   formatPhoneEmail(phone: string): string {
@@ -41,7 +58,7 @@ export const authService = {
     try {
       const email = this.formatPhoneEmail(params.phone);
 
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      const { data: authData } = await supabase.auth.signUp({
         email,
         password: params.password,
         options: {
@@ -84,13 +101,10 @@ export const authService = {
         .select()
         .single();
 
-      if (error || !data) {
-        currentProfileState = newProfile;
-        return { profile: newProfile };
-      }
-
-      currentProfileState = data as Profile;
-      return { profile: data as Profile };
+      const savedProfile = (error || !data) ? newProfile : (data as Profile);
+      currentProfileState = savedProfile;
+      await saveProfileToStorage(savedProfile);
+      return { profile: savedProfile };
     } catch (e: any) {
       const fallback: Profile = {
         id: `usr-${Date.now()}`,
@@ -103,6 +117,7 @@ export const authService = {
         longitude: params.longitude || -0.1870,
       };
       currentProfileState = fallback;
+      await saveProfileToStorage(fallback);
       return { profile: fallback };
     }
   },
@@ -113,7 +128,7 @@ export const authService = {
   }): Promise<{ profile: Profile; error?: string }> {
     try {
       const email = this.formatPhoneEmail(params.phone);
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      const { data: authData } = await supabase.auth.signInWithPassword({
         email,
         password: params.password,
       });
@@ -127,11 +142,12 @@ export const authService = {
 
         if (profileData) {
           currentProfileState = profileData as Profile;
+          await saveProfileToStorage(profileData as Profile);
           return { profile: profileData as Profile };
         }
       }
 
-      // Query profiles table directly by phone number if auth session exists or fallback
+      // Fallback: query profiles by phone number
       const { data: phoneProfile } = await supabase
         .from('profiles')
         .select('*')
@@ -140,10 +156,11 @@ export const authService = {
 
       if (phoneProfile) {
         currentProfileState = phoneProfile as Profile;
+        await saveProfileToStorage(phoneProfile as Profile);
         return { profile: phoneProfile as Profile };
       }
 
-      // Default fallback profile for login
+      // Last resort fallback
       const fallback: Profile = {
         id: authData?.user?.id || `usr-${Date.now()}`,
         role: 'buyer',
@@ -155,6 +172,7 @@ export const authService = {
         longitude: -0.1870,
       };
       currentProfileState = fallback;
+      await saveProfileToStorage(fallback);
       return { profile: fallback };
     } catch (e: any) {
       const fallback: Profile = {
@@ -168,12 +186,14 @@ export const authService = {
         longitude: -0.1870,
       };
       currentProfileState = fallback;
+      await saveProfileToStorage(fallback);
       return { profile: fallback };
     }
   },
 
   async getCurrentProfile(): Promise<Profile | null> {
     try {
+      // 1. Check active Supabase session
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData?.session?.user) {
         const { data } = await supabase
@@ -184,12 +204,23 @@ export const authService = {
 
         if (data) {
           currentProfileState = data as Profile;
+          await saveProfileToStorage(data as Profile);
           return data as Profile;
         }
       }
-    } catch (e) { }
+    } catch (_) {}
 
-    return currentProfileState;
+    // 2. In-memory cache
+    if (currentProfileState) return currentProfileState;
+
+    // 3. AsyncStorage fallback (survives app restarts)
+    const stored = await loadProfileFromStorage();
+    if (stored) {
+      currentProfileState = stored;
+      return stored;
+    }
+
+    return null;
   },
 
   async updateProfile(id: string, updates: Partial<Profile>): Promise<Profile | null> {
@@ -203,12 +234,14 @@ export const authService = {
 
       if (data) {
         currentProfileState = data as Profile;
+        await saveProfileToStorage(data as Profile);
         return data as Profile;
       }
-    } catch (e) { }
+    } catch (_) {}
 
     if (currentProfileState) {
       currentProfileState = { ...currentProfileState, ...updates };
+      await saveProfileToStorage(currentProfileState);
     }
     return currentProfileState;
   },
@@ -223,13 +256,16 @@ export const authService = {
 
       if (error || !data) return [];
       return data as Profile[];
-    } catch (e) {
+    } catch (_) {
       return [];
     }
   },
 
-  signOut() {
+  async signOut() {
     currentProfileState = null;
-    supabase.auth.signOut().catch(() => { });
+    try {
+      await AsyncStorage.removeItem(PROFILE_STORAGE_KEY);
+    } catch (_) {}
+    supabase.auth.signOut().catch(() => {});
   },
 };

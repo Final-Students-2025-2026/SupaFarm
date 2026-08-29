@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { storageService } from '@/services/storageService';
 import { type Product } from '@/components/marketplace-ui';
 
 export type MarketPriceItem = {
@@ -7,6 +8,22 @@ export type MarketPriceItem = {
   price: string;
   change: string;
   up: boolean;
+};
+
+export type CropListingRecord = {
+  id: string;
+  farmer_id: string;
+  title: string;
+  crop_type: string;
+  unit: string;
+  price_ghc: number;
+  description?: string;
+  badge?: string;
+  images?: string[];
+  latitude?: number;
+  longitude?: number;
+  status: 'available' | 'sold_out' | 'inactive';
+  created_at?: string;
 };
 
 export const marketplaceService = {
@@ -20,7 +37,7 @@ export const marketplaceService = {
         req = req.ilike('title', `%${query}%`);
       }
 
-      const { data, error } = await req;
+      const { data, error } = await req.eq('status', 'available').order('created_at', { ascending: false });
 
       if (data && data.length > 0 && !error) {
         return data.map((item) => ({
@@ -32,7 +49,9 @@ export const marketplaceService = {
           unit: item.unit || 'per bag',
           rating: '5.0',
           badge: item.badge || item.crop_type || 'Fresh Harvest',
-          image: item.title.toLowerCase().includes('tomato')
+          image: item.images?.[0]
+            ? { uri: item.images[0] }
+            : item.title.toLowerCase().includes('tomato')
             ? require('@/assets/images/market/tomatoes.jpg')
             : item.title.toLowerCase().includes('maize') || item.title.toLowerCase().includes('corn')
             ? require('@/assets/images/market/maize.jpg')
@@ -43,7 +62,19 @@ export const marketplaceService = {
       }
     } catch (e) {}
 
-    // No hardcoded static data — return empty list if DB has no records
+    return [];
+  },
+
+  async getMyListings(farmerId: string): Promise<CropListingRecord[]> {
+    try {
+      const { data, error } = await supabase
+        .from('crop_listings')
+        .select('*')
+        .eq('farmer_id', farmerId)
+        .order('created_at', { ascending: false });
+
+      if (!error && data) return data as CropListingRecord[];
+    } catch (_) {}
     return [];
   },
 
@@ -70,32 +101,70 @@ export const marketplaceService = {
   },
 
   async createCropListing(newListing: {
-    farmerId?: string;
+    farmerId: string;
     title: string;
     cropType: string;
     unit: string;
     priceGhc: number;
     description?: string;
+    badge?: string;
+    imageUri?: string;
     latitude?: number;
     longitude?: number;
-  }): Promise<boolean> {
+  }): Promise<CropListingRecord | null> {
     try {
-      const { error } = await supabase.from('crop_listings').insert([
-        {
-          farmer_id: newListing.farmerId || null,
+      // Upload crop image to Supabase Storage if a local URI was provided
+      let images: string[] = [];
+      if (newListing.imageUri) {
+        const uploadedUrl = await storageService.uploadImage(newListing.imageUri, 'crops');
+        if (uploadedUrl) images = [uploadedUrl];
+      }
+
+      const { data, error } = await supabase
+        .from('crop_listings')
+        .insert([{
+          farmer_id: newListing.farmerId,
           title: newListing.title,
           crop_type: newListing.cropType,
           unit: newListing.unit,
           price_ghc: newListing.priceGhc,
           description: newListing.description,
-          badge: newListing.cropType || 'Fresh Harvest',
+          badge: newListing.badge || newListing.cropType || 'Fresh Harvest',
+          images,
           latitude: newListing.latitude || 5.6037,
           longitude: newListing.longitude || -0.1870,
           status: 'available',
-        },
-      ]);
-      if (!error) return true;
-    } catch (e) {}
-    return true;
+        }])
+        .select()
+        .single();
+
+      if (!error && data) return data as CropListingRecord;
+    } catch (_) {}
+    return null;
+  },
+
+  async updateCropListing(
+    id: string,
+    updates: Partial<Pick<CropListingRecord, 'title' | 'price_ghc' | 'unit' | 'description' | 'badge' | 'status'>>
+  ): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('crop_listings')
+        .update(updates)
+        .eq('id', id);
+      return !error;
+    } catch (_) {}
+    return false;
+  },
+
+  async deleteCropListing(id: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('crop_listings')
+        .delete()
+        .eq('id', id);
+      return !error;
+    } catch (_) {}
+    return false;
   },
 };

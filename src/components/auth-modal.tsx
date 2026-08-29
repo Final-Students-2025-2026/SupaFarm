@@ -1,6 +1,8 @@
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -27,6 +29,7 @@ export function AuthModal({
   visible: boolean;
   onClose: () => void;
   onSuccess: (user: {
+    id: string;
     role: UserRole;
     accountType?: AccountType;
     phone: string;
@@ -85,11 +88,16 @@ export function AuthModal({
     const { profile } = await authService.signInWithPhonePassword({ phone, password });
     setLoading(false);
     onSuccess({
+      id: profile.id,
       role: profile.role,
       accountType: profile.account_type,
       phone: profile.phone_number,
       fullName: profile.full_name,
       location: profile.address_text || 'Ghana',
+      latitude: profile.latitude,
+      longitude: profile.longitude,
+      profileImageUrl: profile.profile_image_url,
+      farmBackgroundImageUrl: profile.farm_background_image_url,
     });
     onClose();
   };
@@ -104,13 +112,17 @@ export function AuthModal({
   };
 
   const handleCompleteSignUp = async () => {
+    if (!fullName.trim()) {
+      Alert.alert('Name Required', 'Please enter your full name before signing up.');
+      return;
+    }
     setLoading(true);
     const { profile } = await authService.signUp3Step({
       role,
       accountType,
       phone: phone || '',
       password: password || '123456',
-      fullName: fullName || (role === 'farmer' ? 'Farm Seller' : 'Produce Buyer'),
+      fullName: fullName.trim(),
       locationSearch: locationSearch || addressText || 'Ghana',
       latitude,
       longitude,
@@ -119,6 +131,7 @@ export function AuthModal({
     });
     setLoading(false);
     onSuccess({
+      id: profile.id,
       role: profile.role,
       accountType: profile.account_type,
       phone: profile.phone_number,
@@ -203,9 +216,14 @@ export function AuthModal({
                   </View>
                 </View>
 
-                <Pressable onPress={handleLogin} style={styles.primaryBtn}>
+                <Pressable
+                  onPress={handleLogin}
+                  style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]}
+                  disabled={loading}>
+                  {loading
+                    ? <ActivityIndicator color={Palette.white} size="small" />
+                    : <MaterialCommunityIcons name="login" size={18} color={Palette.white} />}
                   <Text style={styles.primaryBtnText}>{loading ? 'Logging In…' : 'Log In'}</Text>
-                  <MaterialCommunityIcons name="arrow-right" size={18} color={Palette.white} />
                 </Pressable>
 
                 <Pressable onPress={() => setAuthMode('signup')} style={styles.switchModeWrap}>

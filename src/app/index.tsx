@@ -349,18 +349,20 @@ export default function HomeScreen() {
         visible={showAuthModal}
         onClose={() => setShowAuthModal(false)}
         onSuccess={(u) => {
+          // Build a real profile from the auth success data
           const newProf: Profile = {
-            id: 'usr-new',
+            id: u.id || 'usr-new',
             role: u.role,
             account_type: u.accountType,
             full_name: u.fullName,
             phone_number: u.phone,
             address_text: u.location,
-            latitude: 5.6037,
-            longitude: -0.1870,
+            latitude: u.latitude ?? 5.6037,
+            longitude: u.longitude ?? -0.1870,
+            profile_image_url: u.profileImageUrl,
+            farm_background_image_url: u.farmBackgroundImageUrl,
           };
           setUserProfile(newProf);
-          authService.updateProfile(newProf.id, newProf);
         }}
       />
 
@@ -378,10 +380,12 @@ export default function HomeScreen() {
       <CreateListingModal
         visible={showCreateListingModal}
         onClose={() => setShowCreateListingModal(false)}
+        farmerId={userProfile?.id}
         farmerName={userProfile?.full_name}
         farmerLocation={userProfile?.address_text}
-        onSuccess={(newProduct) => {
-          setProductsList((prev) => [newProduct, ...prev]);
+        onSuccess={() => {
+          // Refresh the listings so newly posted crop appears
+          refreshListings();
         }}
       />
     </View>
