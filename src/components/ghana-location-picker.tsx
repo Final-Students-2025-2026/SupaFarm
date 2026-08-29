@@ -89,59 +89,31 @@ export function GhanaLocationPicker({
     const timeoutId = setTimeout(async () => {
       try {
         setLoading(true);
-        const googleApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
-
-        if (googleApiKey) {
-          const googleRes = await fetch(
-            `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
-              query
-            )}&components=country:GH&key=${googleApiKey}`
-          );
-          const googleData = await googleRes.json();
-
-          if (active && googleData.status === 'OK' && Array.isArray(googleData.results)) {
-            const googleMatches: GhanaLocation[] = googleData.results.map((item: any) => ({
-              addressText: item.formatted_address,
-              latitude: item.geometry.location.lat,
-              longitude: item.geometry.location.lng,
-              region: 'Ghana',
-            }));
-
-            const combined = [...localMatches];
-            for (const gLoc of googleMatches) {
-              if (!combined.some((c) => Math.abs(c.latitude - gLoc.latitude) < 0.001)) {
-                combined.push(gLoc);
-              }
-            }
-            setSuggestions(combined);
-            return;
-          }
-        }
-
-        // Fallback to OpenStreetMap Nominatim restricted to Ghana
+        // OpenStreetMap Nominatim Geocoding (100% Open-Source, No API Key required)
         const res = await fetch(
           `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
             query
           )}&countrycodes=gh&limit=5`,
           {
             headers: {
-              'User-Agent': 'SupaFarmGhanaApp/1.0',
+              'User-Agent': 'SupaFarm-Ghana/1.0',
             },
           }
         );
         const data = await res.json();
-        if (active && Array.isArray(data) && data.length > 0) {
-          const apiMatches: GhanaLocation[] = data.map((item: any) => ({
-            addressText: `${item.display_name.split(',').slice(0, 3).join(',')}, Ghana`,
+
+        if (active && Array.isArray(data)) {
+          const osmMatches: GhanaLocation[] = data.map((item: any) => ({
+            addressText: item.display_name,
             latitude: parseFloat(item.lat),
             longitude: parseFloat(item.lon),
             region: 'Ghana',
           }));
 
           const combined = [...localMatches];
-          for (const apiLoc of apiMatches) {
-            if (!combined.some((c) => Math.abs(c.latitude - apiLoc.latitude) < 0.001)) {
-              combined.push(apiLoc);
+          for (const oLoc of osmMatches) {
+            if (!combined.some((c) => Math.abs(c.latitude - oLoc.latitude) < 0.001)) {
+              combined.push(oLoc);
             }
           }
           setSuggestions(combined);

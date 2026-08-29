@@ -1,15 +1,63 @@
-import { Image } from 'expo-image';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Palette } from '@/constants/theme';
 
-export type RouteStep = {
-  instruction: string;
-  distance: string;
-  duration: string;
-};
+function getHaversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Earth radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+    Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLon / 2) *
+    Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function formatDuration(minutes: number): string {
+  const hrs = Math.floor(minutes / 60);
+  const mins = Math.round(minutes % 60);
+  if (hrs > 0) {
+    return `${hrs} hr ${mins} mins`;
+  }
+  return `${mins} mins`;
+}
+
+/** Decode a Google Maps encoded polyline string into lat/lng pairs. */
+function decodeGooglePolyline(encoded: string): { latitude: number; longitude: number }[] {
+  const pts: { latitude: number; longitude: number }[] = [];
+  let idx = 0, lat = 0, lng = 0;
+  while (idx < encoded.length) {
+    let b: number, shift = 0, result = 0;
+    do { b = encoded.charCodeAt(idx++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lat += result & 1 ? ~(result >> 1) : result >> 1;
+    shift = 0; result = 0;
+    do { b = encoded.charCodeAt(idx++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lng += result & 1 ? ~(result >> 1) : result >> 1;
+    pts.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
+  }
+  return pts;
+}
+
+// Dark "SupaFarm" map style for Google-provided maps (Android always, iOS only if
+// you force PROVIDER_GOOGLE — see notes below). Apple Maps on iOS ignores this.
+const darkMapStyle = [
+  { elementType: 'geometry', stylers: [{ color: Palette.forestDark }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: Palette.forestDark }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: Palette.mintDark }] },
+  { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: 'rgba(255,255,255,0.15)' }] },
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: Palette.forest }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: Palette.emerald }] },
+  { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: Palette.white }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: Palette.forestCard }] },
+];
 
 export function InAppMapDirectionsModal({
   visible,
@@ -26,110 +74,143 @@ export function InAppMapDirectionsModal({
   originName?: string;
   destinationName?: string;
 }) {
+  const mapRef = useRef<MapView>(null);
   const [loading, setLoading] = useState(true);
-  const [distanceText, setDistanceText] = useState('365 km');
-  const [durationText, setDurationText] = useState('5 hrs 20 mins');
-  const [routeSteps, setRouteSteps] = useState<RouteStep[]>([]);
-  const [routeVia, setRouteVia] = useState('N6 / N1 Highway');
-  const [mapType, setMapType] = useState<'roadmap' | 'satellite' | 'hybrid'>('roadmap');
-  const [staticMapUrl, setStaticMapUrl] = useState<string | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const [distanceText, setDistanceText] = useState('');
+  const [durationText, setDurationText] = useState('');
+  const [routeVia, setRouteVia] = useState('');
 
-  // GPS Coordinates for visual map display
-  const [originCoords, setOriginCoords] = useState<{ lat: number; lng: number }>({ lat: 5.6037, lng: -0.1870 });
+  const [originCoords, setOriginCoords] = useState<{ lat: number; lng: number }>({ lat: 5.6037, lng: -0.187 });
   const [destCoords, setDestCoords] = useState<{ lat: number; lng: number }>({ lat: 7.5828, lng: -1.9392 });
+  const [polylinePoints, setPolylinePoints] = useState<{ latitude: number; longitude: number }[]>([]);
 
+  // Reset on open
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) {
+      setMapReady(false);
+      setPolylinePoints([]);
+      setLoading(true);
+      return;
+    }
 
     let mounted = true;
-    setLoading(true);
 
-    const fetchGoogleDirections = async () => {
-      const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
-
+    const fetchRoute = async () => {
       try {
-        if (apiKey) {
-          // Construct Google Maps Static Map Image with origin marker (green), destination marker (red), and polyline path
-          const mapUrl = `https://maps.googleapis.com/maps/api/staticmap?size=800x400&scale=2&maptype=${mapType}&markers=color:0x10b981|label:F|${encodeURIComponent(
-            originLocation
-          )}&markers=color:0xef4444|label:C|${encodeURIComponent(
-            destinationLocation
-          )}&path=color:0x10b981|weight:5|${encodeURIComponent(originLocation)}|${encodeURIComponent(
-            destinationLocation
-          )}&key=${apiKey}`;
+        // ── Geocode both addresses via Nominatim ──────────────────────────────
+        const getCoords = async (locName: string) => {
+          try {
+            const res = await fetch(
+              `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locName)}&format=json&limit=1&countrycodes=gh`,
+              { headers: { 'User-Agent': 'SupaFarmApp/1.0' } }
+            );
+            const data = await res.json();
+            if (data?.length > 0)
+              return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+          } catch (_) { }
+          return null;
+        };
 
-          setStaticMapUrl(mapUrl);
+        const origC = (await getCoords(originLocation)) ?? { lat: 5.6037, lng: -0.187 };
+        const destC = (await getCoords(destinationLocation)) ?? { lat: 7.5828, lng: -1.9392 };
 
-          const directionsUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(
-            originLocation
-          )}&destination=${encodeURIComponent(destinationLocation)}&key=${apiKey}`;
+        if (!mounted) return;
+        setOriginCoords(origC);
+        setDestCoords(destC);
 
-          const res = await fetch(directionsUrl);
-          const data = await res.json();
+        let routePoints: { latitude: number; longitude: number }[] = [];
+        let distance = '';
+        let duration = '';
+        let viaRouteName = 'Ghana Highway';
 
-          if (mounted && data.status === 'OK' && data.routes && data.routes.length > 0) {
-            const leg = data.routes[0].legs[0];
-            setDistanceText(leg.distance.text);
-            setDurationText(leg.duration.text);
-            setRouteVia(data.routes[0].summary || 'N6 / N1 Ghana Highway');
-
-            if (leg.start_location) {
-              setOriginCoords({ lat: leg.start_location.lat, lng: leg.start_location.lng });
+        // ── Tier 1: Google Directions REST API (real road polyline) ───────────
+        const googleKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+        if (googleKey) {
+          try {
+            const url =
+              `https://maps.googleapis.com/maps/api/directions/json` +
+              `?origin=${origC.lat},${origC.lng}` +
+              `&destination=${destC.lat},${destC.lng}` +
+              `&mode=driving&key=${googleKey}`;
+            const res = await fetch(url);
+            const data = await res.json();
+            if (data.status === 'OK' && data.routes?.length > 0) {
+              const route = data.routes[0];
+              const leg = route.legs[0];
+              distance = leg.distance.text;
+              duration = leg.duration.text;
+              viaRouteName = route.summary || 'Ghana Highway';
+              // Decode the overview_polyline
+              routePoints = decodeGooglePolyline(route.overview_polyline.points);
             }
-            if (leg.end_location) {
-              setDestCoords({ lat: leg.end_location.lat, lng: leg.end_location.lng });
-            }
-
-            const steps: RouteStep[] = leg.steps.map((s: any) => ({
-              instruction: s.html_instructions.replace(/<[^>]*>?/gm, ''),
-              distance: s.distance.text,
-              duration: s.duration.text,
-            }));
-            setRouteSteps(steps);
-            setLoading(false);
-            return;
-          }
+          } catch (_) { }
         }
-      } catch (e) {}
 
-      // Fallback route steps if offline or API key pending
-      if (mounted) {
-        setStaticMapUrl(null);
-        setDistanceText('365 km');
-        setDurationText('5 hrs 15 mins');
-        setRouteVia('N6 Highway (Accra - Kumasi - Techiman)');
-        setRouteSteps([
-          {
-            instruction: `Start at ${originName} (${originLocation}) heading north on N6 Highway`,
-            distance: '65 km',
-            duration: '1 hr 10 mins',
-          },
-          {
-            instruction: 'Continue along N6 Highway bypass through Suhum & Nkawkaw',
-            distance: '140 km',
-            duration: '2 hrs 05 mins',
-          },
-          {
-            instruction: 'Merge onto Kumasi Ring Road toward Offinso / N10',
-            distance: '95 km',
-            duration: '1 hr 20 mins',
-          },
-          {
-            instruction: `Arrive at ${destinationName} (${destinationLocation})`,
-            distance: '65 km',
-            duration: '40 mins',
-          },
-        ]);
+        // ── Tier 2: OSRM (free, real GeoJSON road geometry) ──────────────────
+        if (routePoints.length === 0) {
+          try {
+            const url =
+              `https://router.project-osrm.org/route/v1/driving/` +
+              `${origC.lng},${origC.lat};${destC.lng},${destC.lat}` +
+              `?overview=full&geometries=geojson`;
+            const res = await fetch(url);
+            const data = await res.json();
+            if (data.routes?.length > 0) {
+              const r = data.routes[0];
+              if (Array.isArray(r.geometry?.coordinates)) {
+                routePoints = r.geometry.coordinates.map((pt: [number, number]) => ({
+                  latitude: pt[1],
+                  longitude: pt[0],
+                }));
+              }
+              const distKm = r.distance / 1000;
+              const durMins = r.duration / 60;
+              distance = `${distKm.toFixed(1)} km`;
+              duration = formatDuration(durMins);
+              viaRouteName = r.legs[0]?.summary || 'Ghana Highway';
+            }
+          } catch (_) { }
+        }
+
+        // ── Tier 3: Straight-line fallback ───────────────────────────────────
+        if (routePoints.length === 0) {
+          routePoints = [
+            { latitude: origC.lat, longitude: origC.lng },
+            { latitude: destC.lat, longitude: destC.lng },
+          ];
+          const km = getHaversineDistance(origC.lat, origC.lng, destC.lat, destC.lng) * 1.25;
+          distance = `~${km.toFixed(1)} km`;
+          duration = `~${formatDuration((km / 35) * 60)}`;
+          viaRouteName = 'Direct Route';
+        }
+
+        if (!mounted) return;
+        setPolylinePoints(routePoints);
+        setDistanceText(distance);
+        setDurationText(duration);
+        setRouteVia(viaRouteName);
         setLoading(false);
+      } catch (_) {
+        if (mounted) setLoading(false);
       }
     };
 
-    fetchGoogleDirections();
+    fetchRoute();
+    return () => { mounted = false; };
+  }, [visible, originLocation, destinationLocation]);
 
-    return () => {
-      mounted = false;
-    };
-  }, [visible, originLocation, destinationLocation, mapType]);
+  // Fit map ONLY after BOTH the map is rendered AND we have route points
+  useEffect(() => {
+    if (!mapReady || polylinePoints.length < 2) return;
+    const timer = setTimeout(() => {
+      mapRef.current?.fitToCoordinates(polylinePoints, {
+        edgePadding: { top: 100, right: 60, bottom: 240, left: 60 },
+        animated: true,
+      });
+    }, 400); // short delay lets MapView finish its initial render
+    return () => clearTimeout(timer);
+  }, [mapReady, polylinePoints]);
 
   if (!visible) return null;
 
@@ -140,102 +221,91 @@ export function InAppMapDirectionsModal({
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>
-              <MaterialCommunityIcons name="google-maps" size={24} color={Palette.emerald} />
+              <MaterialCommunityIcons name="map-marker-path" size={24} color={Palette.emerald} />
               <View>
-                <Text style={styles.headerTitle}>Live Route & Map Directions</Text>
-                <Text style={styles.headerSub}>Farmer ↔ Client Navigation</Text>
+                <Text style={styles.headerTitle}>Full Route Navigation Map</Text>
+                <Text style={styles.headerSub}>Farmer ↔ Client Live Route</Text>
               </View>
             </View>
             <Pressable onPress={onClose} style={styles.closeBtn}>
-              <MaterialCommunityIcons name="close" size={22} color={Palette.ink} />
+              <MaterialCommunityIcons name="close" size={22} color={Palette.white} />
             </Pressable>
           </View>
 
-          <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-            {/* Map Controls Header */}
-            <View style={styles.mapTypeBar}>
-              <Text style={styles.mapTypeLabel}>Map Layer:</Text>
-              <Pressable
-                onPress={() => setMapType('roadmap')}
-                style={[styles.mapTypeBtn, mapType === 'roadmap' && styles.mapTypeBtnActive]}>
-                <Text style={[styles.mapTypeBtnText, mapType === 'roadmap' && styles.mapTypeBtnTextActive]}>Roadmap</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setMapType('satellite')}
-                style={[styles.mapTypeBtn, mapType === 'satellite' && styles.mapTypeBtnActive]}>
-                <Text style={[styles.mapTypeBtnText, mapType === 'satellite' && styles.mapTypeBtnTextActive]}>Satellite</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setMapType('hybrid')}
-                style={[styles.mapTypeBtn, mapType === 'hybrid' && styles.mapTypeBtnActive]}>
-                <Text style={[styles.mapTypeBtnText, mapType === 'hybrid' && styles.mapTypeBtnTextActive]}>Hybrid</Text>
-              </Pressable>
-            </View>
+          {/* Full Height Interactive Route Map Frame */}
+          <View style={styles.fullMapFrame}>
+            <MapView
+              ref={mapRef}
+              style={styles.map}
+              // Google provider gives consistent styling + Polyline rendering on
+              // Android by default. On iOS this requires a native Google Maps SDK
+              // key configured in app.json — omit PROVIDER_GOOGLE on iOS to use
+              // Apple Maps instead (customMapStyle will then be ignored there).
+              provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+              customMapStyle={Platform.OS === 'android' ? darkMapStyle : undefined}
+              initialRegion={{
+                latitude: (originCoords.lat + destCoords.lat) / 2,
+                longitude: (originCoords.lng + destCoords.lng) / 2,
+                latitudeDelta: Math.abs(originCoords.lat - destCoords.lat) * 1.6 || 1,
+                longitudeDelta: Math.abs(originCoords.lng - destCoords.lng) * 1.6 || 1,
+              }}
+              onMapReady={() => setMapReady(true)}
+            >
+              <Marker
+                coordinate={{ latitude: originCoords.lat, longitude: originCoords.lng }}
+                anchor={{ x: 0.5, y: 0.5 }}
+              >
+                <View style={styles.originPin}>
+                  <MaterialCommunityIcons name="sprout" size={20} color={Palette.white} />
+                </View>
+              </Marker>
 
-            {/* Interactive In-App Route Map Frame */}
-            <View style={styles.mapFrame}>
-              {staticMapUrl ? (
-                <Image source={{ uri: staticMapUrl }} style={styles.staticMapImage} contentFit="cover" />
-              ) : (
-                <>
-                  {/* Interactive Styled Map Grid & Polylines */}
-                  <View style={styles.mapGridLineH1} />
-                  <View style={styles.mapGridLineH2} />
-                  <View style={styles.mapGridLineV1} />
-                  <View style={styles.mapGridLineV2} />
+              <Marker
+                coordinate={{ latitude: destCoords.lat, longitude: destCoords.lng }}
+                anchor={{ x: 0.5, y: 0.5 }}
+              >
+                <View style={styles.destPin}>
+                  <MaterialCommunityIcons name="account-location" size={22} color={Palette.white} />
+                </View>
+              </Marker>
 
-                  {/* Highway Route Polyline Graphic */}
-                  <View style={styles.routePolyline} />
-                  <View style={styles.routePolylineGlow} />
-
-                  {/* Pin 1: Origin (Farmer) */}
-                  <View style={styles.originPinWrap}>
-                    <View style={styles.originPin}>
-                      <MaterialCommunityIcons name="sprout" size={16} color={Palette.white} />
-                    </View>
-                    <View style={styles.pinBadgeGreen}>
-                      <Text style={styles.pinBadgeText}>FARMER</Text>
-                    </View>
-                    <Text style={styles.pinLabelText} numberOfLines={1}>{originName}</Text>
-                  </View>
-
-                  {/* Animated Vehicle Courier */}
-                  <View style={styles.courierPinWrap}>
-                    <View style={styles.courierPin}>
-                      <MaterialCommunityIcons name="motorbike" size={16} color={Palette.forestDark} />
-                    </View>
-                  </View>
-
-                  {/* Pin 2: Destination (Client / Buyer) */}
-                  <View style={styles.destPinWrap}>
-                    <View style={styles.destPin}>
-                      <MaterialCommunityIcons name="account-location" size={18} color={Palette.white} />
-                    </View>
-                    <View style={styles.pinBadgeRed}>
-                      <Text style={styles.pinBadgeText}>CLIENT</Text>
-                    </View>
-                    <Text style={styles.pinLabelText} numberOfLines={1}>{destinationName}</Text>
-                  </View>
-                </>
+              {polylinePoints.length > 1 && (
+                <Polyline
+                  coordinates={polylinePoints}
+                  strokeColor={Palette.emerald}
+                  strokeWidth={6}
+                  lineCap="round"
+                  lineJoin="round"
+                />
               )}
+            </MapView>
 
-              {/* Live Distance Pill */}
-              <View style={styles.mapInfoPill}>
-                <MaterialCommunityIcons name="navigation-variant" size={14} color={Palette.emerald} />
-                <Text style={styles.mapInfoText}>
-                  {distanceText} • {durationText} via {routeVia}
-                </Text>
+            {/* Loading overlay while route data / map is still resolving */}
+            {(loading || !mapReady) && (
+              <View style={styles.loadingOverlay} pointerEvents="none">
+                <ActivityIndicator size="large" color={Palette.emerald} />
+                <Text style={styles.loadingText}>{loading ? 'Calculating route…' : 'Loading map…'}</Text>
               </View>
+            )}
+
+            {/* Floating Top Distance & Duration Pill */}
+            <View style={styles.floatingHeaderPill}>
+              <MaterialCommunityIcons name="navigation-variant" size={16} color={Palette.emerald} />
+              <Text style={styles.floatingPillText}>
+                {loading ? 'Calculating Route…' : `${distanceText} • ${durationText} (${routeVia})`}
+              </Text>
             </View>
 
-            {/* GPS Coordinates & Address Details Card */}
-            <View style={styles.addressCard}>
+            {/* Bottom Floating App Theme Details Card */}
+            <View style={styles.bottomFloatingCard}>
               <View style={styles.addressRow}>
                 <View style={[styles.dot, { backgroundColor: Palette.emerald }]} />
                 <View style={styles.addressCopy}>
                   <View style={styles.partyHeader}>
-                    <Text style={styles.addrLabel}>FARMER / SELLER LOCATION</Text>
-                    <Text style={styles.gpsCoords}>{originCoords.lat.toFixed(4)}° N, {Math.abs(originCoords.lng).toFixed(4)}° W</Text>
+                    <Text style={styles.addrLabel}>FARMER / SELLER</Text>
+                    <Text style={styles.gpsCoords}>
+                      {originCoords.lat.toFixed(4)}° N, {Math.abs(originCoords.lng).toFixed(4)}° W
+                    </Text>
                   </View>
                   <Text style={styles.addrTitle}>{originName}</Text>
                   <Text style={styles.addrSub}>{originLocation}</Text>
@@ -248,51 +318,21 @@ export function InAppMapDirectionsModal({
                 <View style={[styles.dot, { backgroundColor: Palette.tomato }]} />
                 <View style={styles.addressCopy}>
                   <View style={styles.partyHeader}>
-                    <Text style={styles.addrLabel}>CLIENT / BUYER LOCATION</Text>
-                    <Text style={styles.gpsCoords}>{destCoords.lat.toFixed(4)}° N, {Math.abs(destCoords.lng).toFixed(4)}° W</Text>
+                    <Text style={styles.addrLabel}>CLIENT / BUYER</Text>
+                    <Text style={styles.gpsCoords}>
+                      {destCoords.lat.toFixed(4)}° N, {Math.abs(destCoords.lng).toFixed(4)}° W
+                    </Text>
                   </View>
                   <Text style={styles.addrTitle}>{destinationName}</Text>
                   <Text style={styles.addrSub}>{destinationLocation}</Text>
                 </View>
               </View>
+
+              <Pressable onPress={onClose} style={styles.doneBtn}>
+                <Text style={styles.doneBtnText}>Close Map</Text>
+              </Pressable>
             </View>
-
-            {/* Turn-by-Turn Driving Steps */}
-            <View style={styles.stepsSection}>
-              <View style={styles.stepsHeader}>
-                <MaterialCommunityIcons name="format-list-checks" size={18} color={Palette.forest} />
-                <Text style={styles.stepsTitle}>Turn-by-Turn Route Instructions</Text>
-              </View>
-
-              {loading ? (
-                <View style={styles.loadingBox}>
-                  <ActivityIndicator size="small" color={Palette.emerald} />
-                  <Text style={styles.loadingText}>Loading route coordinates…</Text>
-                </View>
-              ) : (
-                <View style={styles.stepsList}>
-                  {routeSteps.map((step, idx) => (
-                    <View key={idx} style={styles.stepItem}>
-                      <View style={styles.stepNumWrap}>
-                        <Text style={styles.stepNumText}>{idx + 1}</Text>
-                      </View>
-                      <View style={styles.stepCopy}>
-                        <Text style={styles.stepInstruction}>{step.instruction}</Text>
-                        <Text style={styles.stepMeta}>
-                          {step.distance} • {step.duration}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </View>
-
-            {/* Close / Done Button */}
-            <Pressable onPress={onClose} style={styles.doneBtn}>
-              <Text style={styles.doneBtnText}>Close Navigation</Text>
-            </Pressable>
-          </ScrollView>
+          </View>
         </View>
       </View>
     </Modal>
@@ -302,245 +342,134 @@ export function InAppMapDirectionsModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
     justifyContent: 'flex-end',
   },
   container: {
-    maxHeight: '92%',
+    height: '92%',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    backgroundColor: Palette.white,
+    backgroundColor: Palette.forestDark,
+    overflow: 'hidden',
   },
   header: {
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 12,
+    paddingBottom: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    backgroundColor: Palette.forestCard,
     borderBottomWidth: 1,
-    borderBottomColor: Palette.line,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    zIndex: 10,
   },
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
   headerTitle: {
-    color: Palette.ink,
+    color: Palette.white,
     fontSize: 17,
     fontWeight: '900',
   },
   headerSub: {
-    color: Palette.muted,
+    color: Palette.emerald,
     fontSize: 11,
     marginTop: 1,
+    fontWeight: '600',
   },
   closeBtn: {
     padding: 6,
   },
-  body: {
-    padding: 20,
-    gap: 14,
+
+  fullMapFrame: {
+    flex: 1,
+    position: 'relative',
+    backgroundColor: Palette.forestDark,
+  },
+  map: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: Palette.forestDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    zIndex: 20,
+  },
+  loadingText: {
+    color: Palette.paleMint,
+    fontSize: 13,
+    fontWeight: '700',
   },
 
-  // Map Layer Controls
-  mapTypeBar: {
+  originPin: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Palette.forest,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2.5,
+    borderColor: Palette.white,
+  },
+  destPin: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Palette.tomato,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2.5,
+    borderColor: Palette.white,
+  },
+
+  floatingHeaderPill: {
+    position: 'absolute',
+    top: 14,
+    alignSelf: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: Palette.forestCard,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  mapTypeLabel: {
-    color: Palette.ink,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  mapTypeBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: Palette.canvas,
     borderWidth: 1,
-    borderColor: Palette.line,
+    borderColor: Palette.emerald,
+    zIndex: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 6,
   },
-  mapTypeBtnActive: {
-    backgroundColor: Palette.forest,
-    borderColor: Palette.forest,
-  },
-  mapTypeBtnText: {
-    color: Palette.ink,
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  mapTypeBtnTextActive: {
+  floatingPillText: {
     color: Palette.white,
-  },
-
-  // Map Graphic Frame
-  mapFrame: {
-    height: 220,
-    borderRadius: 16,
-    backgroundColor: '#0F2C1D',
-    position: 'relative',
-    overflow: 'hidden',
-    justifyContent: 'center',
-  },
-  staticMapImage: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  mapGridLineH1: {
-    position: 'absolute',
-    top: '30%',
-    width: '100%',
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  mapGridLineH2: {
-    position: 'absolute',
-    top: '70%',
-    width: '100%',
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  mapGridLineV1: {
-    position: 'absolute',
-    left: '30%',
-    height: '100%',
-    width: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  mapGridLineV2: {
-    position: 'absolute',
-    left: '70%',
-    height: '100%',
-    width: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  routePolyline: {
-    position: 'absolute',
-    left: '15%',
-    width: '70%',
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: Palette.emerald,
-    zIndex: 2,
-  },
-  routePolylineGlow: {
-    position: 'absolute',
-    left: '12%',
-    width: '76%',
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: 'rgba(16, 185, 129, 0.25)',
-    zIndex: 1,
-  },
-
-  originPinWrap: {
-    position: 'absolute',
-    left: 14,
-    alignItems: 'center',
-    zIndex: 3,
-  },
-  originPin: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Palette.forest,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: Palette.white,
-  },
-  pinBadgeGreen: {
-    marginTop: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    backgroundColor: Palette.emerald,
-  },
-  pinBadgeRed: {
-    marginTop: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    backgroundColor: Palette.tomato,
-  },
-  pinBadgeText: {
-    color: Palette.white,
-    fontSize: 9,
-    fontWeight: '900',
-  },
-  courierPinWrap: {
-    position: 'absolute',
-    left: '46%',
-    alignItems: 'center',
-    zIndex: 3,
-  },
-  courierPin: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: Palette.sun,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: Palette.white,
-  },
-  destPinWrap: {
-    position: 'absolute',
-    right: 14,
-    alignItems: 'center',
-    zIndex: 3,
-  },
-  destPin: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Palette.tomato,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: Palette.white,
-  },
-  pinLabelText: {
-    marginTop: 2,
-    color: Palette.white,
-    fontSize: 9,
-    fontWeight: '800',
-    maxWidth: 75,
-    textAlign: 'center',
-  },
-  mapInfoPill: {
-    position: 'absolute',
-    bottom: 12,
-    alignSelf: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    zIndex: 4,
-  },
-  partyHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  gpsCoords: {
-    color: Palette.emerald,
-    fontSize: 10,
+    fontSize: 13,
     fontWeight: '800',
   },
 
-  // Address Card
-  addressCard: {
-    padding: 14,
-    borderRadius: 14,
-    backgroundColor: Palette.paleMint,
+  bottomFloatingCard: {
+    position: 'absolute',
+    bottom: 16,
+    left: 16,
+    right: 16,
+    borderRadius: 20,
+    backgroundColor: Palette.forestCard,
+    padding: 16,
     borderWidth: 1,
-    borderColor: Palette.line,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    gap: 12,
+    zIndex: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 10,
   },
   addressRow: {
     flexDirection: 'row',
@@ -556,103 +485,48 @@ const styles = StyleSheet.create({
   addressCopy: {
     flex: 1,
   },
+  partyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  gpsCoords: {
+    color: Palette.emerald,
+    fontSize: 10,
+    fontWeight: '800',
+  },
   addrLabel: {
-    color: Palette.muted,
-    fontSize: 9,
+    color: Palette.emerald,
+    fontSize: 10,
     fontWeight: '900',
+    letterSpacing: 0.5,
   },
   addrTitle: {
-    color: Palette.ink,
+    color: Palette.white,
     fontSize: 14,
     fontWeight: '800',
     marginTop: 2,
   },
   addrSub: {
-    color: Palette.muted,
+    color: Palette.paleMint,
     fontSize: 11,
+    opacity: 0.8,
   },
   addrDivider: {
     height: 1,
-    backgroundColor: Palette.line,
-    marginVertical: 10,
-  },
-
-  // Steps
-  stepsSection: {
-    gap: 10,
-  },
-  stepsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepsTitle: {
-    color: Palette.ink,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  loadingBox: {
-    padding: 20,
-    alignItems: 'center',
-    gap: 8,
-  },
-  loadingText: {
-    color: Palette.muted,
-    fontSize: 12,
-  },
-  stepsList: {
-    borderRadius: 14,
-    backgroundColor: Palette.white,
-    borderWidth: 1,
-    borderColor: Palette.line,
-    overflow: 'hidden',
-  },
-  stepItem: {
-    padding: 12,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: Palette.line,
-  },
-  stepNumWrap: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: Palette.mint,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepNumText: {
-    color: Palette.forest,
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  stepCopy: {
-    flex: 1,
-  },
-  stepInstruction: {
-    color: Palette.ink,
-    fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 18,
-  },
-  stepMeta: {
-    color: Palette.muted,
-    fontSize: 11,
-    marginTop: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   doneBtn: {
-    height: 50,
+    height: 48,
     borderRadius: 14,
-    backgroundColor: Palette.forest,
+    backgroundColor: Palette.emerald,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 4,
   },
   doneBtnText: {
-    color: Palette.white,
-    fontSize: 14,
+    color: Palette.forestDark,
+    fontSize: 15,
     fontWeight: '900',
   },
 });
