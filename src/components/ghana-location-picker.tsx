@@ -55,11 +55,20 @@ export function GhanaLocationPicker({
   const [showDropdown, setShowDropdown] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const [justSelected, setJustSelected] = useState(false);
+
   useEffect(() => {
     setQuery(value || '');
   }, [value]);
 
   useEffect(() => {
+    if (justSelected) {
+      setJustSelected(false);
+      setShowDropdown(false);
+      setSuggestions([]);
+      return;
+    }
+
     if (!query.trim() || query.length < 2) {
       setSuggestions([]);
       setShowDropdown(false);
@@ -83,7 +92,6 @@ export function GhanaLocationPicker({
         const googleApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
         if (googleApiKey) {
-          // 1. Google Maps Geocoding / Places API query restricted to Ghana (country:GH)
           const googleRes = await fetch(
             `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
               query
@@ -110,7 +118,7 @@ export function GhanaLocationPicker({
           }
         }
 
-        // 2. Fallback to OpenStreetMap Nominatim restricted to Ghana
+        // Fallback to OpenStreetMap Nominatim restricted to Ghana
         const res = await fetch(
           `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
             query
@@ -148,10 +156,12 @@ export function GhanaLocationPicker({
       active = false;
       clearTimeout(timeoutId);
     };
-  }, [query]);
+  }, [query, justSelected]);
 
   const handleSelect = (loc: GhanaLocation) => {
+    setJustSelected(true);
     setQuery(loc.addressText);
+    setSuggestions([]);
     setShowDropdown(false);
     onSelectLocation(loc);
   };
@@ -163,6 +173,7 @@ export function GhanaLocationPicker({
         <TextInput
           value={query}
           onChangeText={(text) => {
+            setJustSelected(false);
             setQuery(text);
             setShowDropdown(true);
           }}
@@ -170,13 +181,13 @@ export function GhanaLocationPicker({
           placeholderTextColor="#8A958D"
           style={styles.textInput}
           onFocus={() => {
-            if (suggestions.length > 0) setShowDropdown(true);
+            if (!justSelected && suggestions.length > 0) setShowDropdown(true);
           }}
         />
         {loading ? (
           <ActivityIndicator size="small" color={Palette.emerald} />
         ) : query.length > 0 ? (
-          <Pressable onPress={() => { setQuery(''); setSuggestions([]); setShowDropdown(false); }}>
+          <Pressable onPress={() => { setJustSelected(false); setQuery(''); setSuggestions([]); setShowDropdown(false); }}>
             <MaterialCommunityIcons name="close-circle" size={18} color={Palette.muted} />
           </Pressable>
         ) : null}
@@ -187,7 +198,7 @@ export function GhanaLocationPicker({
         <View style={styles.dropdown}>
           <View style={styles.dropdownHeader}>
             <MaterialCommunityIcons name="google-maps" size={14} color={Palette.emerald} />
-            <Text style={styles.dropdownHeaderText}>Ghana Location Suggestions ({suggestions.length})</Text>
+            <Text style={styles.dropdownHeaderText}>Location Suggestions</Text>
           </View>
 
           {suggestions.slice(0, 6).map((loc, i) => (
@@ -201,9 +212,6 @@ export function GhanaLocationPicker({
               <View style={styles.itemCopy}>
                 <Text style={styles.itemTitle} numberOfLines={1}>
                   {loc.addressText}
-                </Text>
-                <Text style={styles.itemCoords}>
-                  GPS: {loc.latitude.toFixed(4)}° N, {loc.longitude.toFixed(4)}° W
                 </Text>
               </View>
               <MaterialCommunityIcons name="chevron-right" size={18} color={Palette.muted} />
