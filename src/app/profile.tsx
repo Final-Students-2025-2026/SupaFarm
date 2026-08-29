@@ -1,5 +1,5 @@
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -7,22 +7,33 @@ import { ScreenHeader } from '@/components/marketplace-ui';
 import { AuthModal } from '@/components/auth-modal';
 import { DeliveryTrackingModal } from '@/components/delivery-tracking-modal';
 import { BottomTabInset, MaxContentWidth, Palette } from '@/constants/theme';
+import { authService, type Profile } from '@/services/authService';
+import { orderService, type OrderRecord } from '@/services/orderService';
 
 export default function ProfileScreen() {
   const [notifications, setNotifications] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
-  const [userProfile, setUserProfile] = useState({
-    name: 'Kwame Asante',
-    role: 'Verified Buyer',
-    phone: '+233 24 892 1042',
-    location: 'Agbogbloshie Market, Accra',
-  });
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [orders, setOrders] = useState<OrderRecord[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    authService.getCurrentProfile().then((data) => {
+      if (mounted) setProfile(data);
+    });
+    orderService.getUserOrders().then((data) => {
+      if (mounted) setOrders(data);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const menuItems = [
     {
       label: 'My Orders & Deliveries',
-      caption: 'Track live 3-tier shipments and view receipt',
+      caption: `Track ${orders.length} active 3-tier shipments`,
       icon: 'package-variant-closed',
       onPress: () => setShowDeliveryModal(true),
     },
@@ -34,7 +45,7 @@ export default function ProfileScreen() {
     },
     {
       label: 'Delivery & Farm Location',
-      caption: userProfile.location,
+      caption: profile?.address_text || 'Accra, Greater Accra',
       icon: 'map-marker-outline',
       onPress: () => setShowAuthModal(true),
     },
@@ -45,6 +56,9 @@ export default function ProfileScreen() {
       onPress: () => {},
     },
   ];
+
+  const fullName = profile?.full_name || 'Kwame Asante';
+  const roleTitle = profile?.role === 'farmer' ? 'Verified Farmer' : `Buyer (${profile?.account_type || 'Individual'})`;
 
   return (
     <View style={styles.screen}>
@@ -66,21 +80,21 @@ export default function ProfileScreen() {
             <View style={styles.profileCard}>
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>
-                  {userProfile.name.split(' ').map((n) => n[0]).join('')}
+                  {fullName.split(' ').map((n) => n[0]).join('')}
                 </Text>
               </View>
               <View style={styles.identity}>
                 <View style={styles.nameRow}>
-                  <Text style={styles.name}>{userProfile.name}</Text>
+                  <Text style={styles.name}>{fullName}</Text>
                   <MaterialCommunityIcons
                     name="check-decagram"
                     size={17}
                     color={Palette.emerald}
                   />
                 </View>
-                <Text style={styles.phone}>{userProfile.phone}</Text>
+                <Text style={styles.phone}>{profile?.phone_number || '+233 24 892 1042'}</Text>
                 <View style={styles.buyerPill}>
-                  <Text style={styles.buyerPillText}>{userProfile.role}</Text>
+                  <Text style={styles.buyerPillText}>{roleTitle}</Text>
                 </View>
               </View>
               <Pressable onPress={() => setShowAuthModal(true)} style={styles.editButton}>
@@ -90,7 +104,7 @@ export default function ProfileScreen() {
 
             <View style={styles.statsRow}>
               <View style={styles.stat}>
-                <Text style={styles.statValue}>12</Text>
+                <Text style={styles.statValue}>{orders.length}</Text>
                 <Text style={styles.statLabel}>Orders</Text>
               </View>
               <View style={styles.statDivider} />
@@ -164,11 +178,15 @@ export default function ProfileScreen() {
         visible={showAuthModal}
         onClose={() => setShowAuthModal(false)}
         onSuccess={(u) => {
-          setUserProfile({
-            name: u.fullName,
-            role: u.role === 'farmer' ? 'Verified Farmer' : `Buyer (${u.accountType || 'Individual'})`,
-            phone: u.phone,
-            location: u.location,
+          setProfile({
+            id: 'usr-updated',
+            role: u.role,
+            account_type: u.accountType,
+            full_name: u.fullName,
+            phone_number: u.phone,
+            address_text: u.location,
+            latitude: 5.6037,
+            longitude: -0.1870,
           });
         }}
       />

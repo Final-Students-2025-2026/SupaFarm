@@ -1,6 +1,6 @@
 import { Image, type ImageSource } from 'expo-image';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -11,54 +11,34 @@ import {
 } from 'react-native';
 
 import { Palette } from '@/constants/theme';
+import {
+  greenhouseService,
+  type Greenhouse,
+  type PlantRecord,
+  type TelemetryPoint,
+} from '@/services/greenhouseService';
 
-export type PlantItem = {
-  id: string;
-  name: string;
-  stage: 'Reproductive' | 'Maturation' | 'Vegetative' | 'Seedling';
-  count: string;
-  price: string;
-  image: ImageSource;
-};
+export function HumidityChart({ greenhouseId = 'gh-akumadan-1' }: { greenhouseId?: string }) {
+  const [points, setPoints] = useState<TelemetryPoint[]>([]);
+  const [selectedPoint, setSelectedPoint] = useState(3);
 
-export const samplePlants: PlantItem[] = [
-  {
-    id: 'p1',
-    name: 'Tomato Plant',
-    stage: 'Reproductive',
-    count: '120 plant',
-    price: 'GH₵ 95 / crate',
-    image: require('@/assets/images/market/tomatoes.jpg'),
-  },
-  {
-    id: 'p2',
-    name: 'Corn Plant',
-    stage: 'Reproductive',
-    count: '120 plant',
-    price: 'GH₵ 420 / bag',
-    image: require('@/assets/images/market/maize.jpg'),
-  },
-  {
-    id: 'p3',
-    name: 'Peanut Plant',
-    stage: 'Maturation',
-    count: '120 plant',
-    price: 'GH₵ 150 / bag',
-    image: require('@/assets/images/market/plantain.jpg'),
-  },
-];
+  useEffect(() => {
+    let mounted = true;
+    greenhouseService.getHumidityHistory(greenhouseId).then((data) => {
+      if (mounted && data && data.length > 0) {
+        setPoints(data);
+        const peakIdx = data.findIndex((p) => p.peak);
+        if (peakIdx !== -1) setSelectedPoint(peakIdx);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [greenhouseId]);
 
-export function HumidityChart() {
-  const [selectedPoint, setSelectedPoint] = useState(3); // 03 Jul peak 45%
-  const points = [
-    { day: '29, Jun', val: 25 },
-    { day: '30, Jun', val: 32 },
-    { day: '01, Jul', val: 28 },
-    { day: '02, Jul', val: 45, peak: true },
-    { day: '03, Jul', val: 38 },
-    { day: '04, Jul', val: 41 },
-    { day: '05, Jul', val: 30 },
-  ];
+  if (!points || points.length === 0) return null;
+
+  const currentVal = points[selectedPoint]?.val || 45;
 
   return (
     <View style={styles.chartContainer}>
@@ -73,7 +53,7 @@ export function HumidityChart() {
       <View style={styles.chartBody}>
         {/* Peak indicator popup */}
         <View style={[styles.peakBadge, { left: `${(selectedPoint / (points.length - 1)) * 75 + 10}%` }]}>
-          <Text style={styles.peakBadgeText}>{points[selectedPoint].val}%</Text>
+          <Text style={styles.peakBadgeText}>{currentVal}%</Text>
           <View style={styles.peakBadgeArrow} />
         </View>
 
@@ -115,7 +95,12 @@ export function HumidityChart() {
   );
 }
 
-export function TelemetryMetrics() {
+export function TelemetryMetrics({ greenhouse }: { greenhouse?: Greenhouse }) {
+  const height = greenhouse?.height_cm || 120;
+  const watering = greenhouse?.moisture_percent || 45;
+  const fertilizer = greenhouse?.fertilizer_type || 'Organic';
+  const age = greenhouse?.age_months || 3;
+
   return (
     <View style={styles.metricsGrid}>
       <View style={styles.metricCard}>
@@ -124,7 +109,7 @@ export function TelemetryMetrics() {
         </View>
         <View style={styles.metricContent}>
           <Text style={styles.metricLabel}>Height</Text>
-          <Text style={styles.metricValue}>120 cm</Text>
+          <Text style={styles.metricValue}>{height} cm</Text>
         </View>
       </View>
 
@@ -134,7 +119,7 @@ export function TelemetryMetrics() {
         </View>
         <View style={styles.metricContent}>
           <Text style={styles.metricLabel}>Watering</Text>
-          <Text style={styles.metricValue}>45 %</Text>
+          <Text style={styles.metricValue}>{watering} %</Text>
         </View>
       </View>
 
@@ -144,7 +129,7 @@ export function TelemetryMetrics() {
         </View>
         <View style={styles.metricContent}>
           <Text style={styles.metricLabel}>Fertilizer</Text>
-          <Text style={styles.metricValue}>Organic</Text>
+          <Text style={styles.metricValue}>{fertilizer}</Text>
         </View>
       </View>
 
@@ -154,7 +139,7 @@ export function TelemetryMetrics() {
         </View>
         <View style={styles.metricContent}>
           <Text style={styles.metricLabel}>Age</Text>
-          <Text style={styles.metricValue}>3 Month</Text>
+          <Text style={styles.metricValue}>{age} Month</Text>
         </View>
       </View>
     </View>
@@ -162,16 +147,16 @@ export function TelemetryMetrics() {
 }
 
 export function GreenhouseDetailCard({
-  name = 'The Greenhouse I',
-  location = 'Akumadan, Ashanti',
-  plantCount = 12,
+  greenhouse,
   onOpenMap,
 }: {
-  name?: string;
-  location?: string;
-  plantCount?: number;
+  greenhouse?: Greenhouse;
   onOpenMap?: () => void;
 }) {
+  const name = greenhouse?.name || 'The Greenhouse I';
+  const location = greenhouse?.location || 'Akumadan, Ashanti';
+  const plantCount = greenhouse?.plants_count || 12;
+
   return (
     <View style={styles.greenhouseCard}>
       <View style={styles.cardHeaderRow}>
@@ -196,7 +181,7 @@ export function GreenhouseDetailCard({
           <MaterialCommunityIcons name="weather-windy" size={18} color={Palette.emerald} />
           <View>
             <Text style={styles.statItemLabel}>Wind</Text>
-            <Text style={styles.statItemVal}>5 m/s</Text>
+            <Text style={styles.statItemVal}>{greenhouse?.wind_speed || '5 m/s'}</Text>
           </View>
         </View>
         <View style={styles.statDivider} />
@@ -205,7 +190,7 @@ export function GreenhouseDetailCard({
           <MaterialCommunityIcons name="water-outline" size={18} color={Palette.emerald} />
           <View>
             <Text style={styles.statItemLabel}>Humidity</Text>
-            <Text style={styles.statItemVal}>20 %</Text>
+            <Text style={styles.statItemVal}>{greenhouse?.humidity || '20 %'}</Text>
           </View>
         </View>
         <View style={styles.statDivider} />
@@ -214,7 +199,7 @@ export function GreenhouseDetailCard({
           <MaterialCommunityIcons name="flower-outline" size={18} color={Palette.emerald} />
           <View>
             <Text style={styles.statItemLabel}>Plant</Text>
-            <Text style={styles.statItemVal}>4 Type</Text>
+            <Text style={styles.statItemVal}>{greenhouse?.plant_types_count || 4} Type</Text>
           </View>
         </View>
       </View>
@@ -222,11 +207,33 @@ export function GreenhouseDetailCard({
   );
 }
 
-export function ControlsGrid() {
-  const [lighting, setLighting] = useState(true);
+export function ControlsGrid({ greenhouse }: { greenhouse?: Greenhouse }) {
+  const [lighting, setLighting] = useState(greenhouse?.lighting_active ?? true);
   const [temperature, setTemperature] = useState(false);
   const [watering, setWatering] = useState(false);
   const [ventilation, setVentilation] = useState(false);
+
+  const ghId = greenhouse?.id || 'gh-akumadan-1';
+
+  const handleToggleLighting = (val: boolean) => {
+    setLighting(val);
+    greenhouseService.updateControlState(ghId, { lighting_active: val });
+  };
+
+  const handleToggleTemp = (val: boolean) => {
+    setTemperature(val);
+    greenhouseService.updateControlState(ghId, { temp_celsius: val ? 24 : 26 });
+  };
+
+  const handleToggleWatering = (val: boolean) => {
+    setWatering(val);
+    greenhouseService.updateControlState(ghId, { watering_ml: val ? 200 : 0 });
+  };
+
+  const handleToggleVentilation = (val: boolean) => {
+    setVentilation(val);
+    greenhouseService.updateControlState(ghId, { ventilation_speed: val ? 10 : 0 });
+  };
 
   return (
     <View style={styles.controlsGrid}>
@@ -246,7 +253,7 @@ export function ControlsGrid() {
           </View>
           <Switch
             value={lighting}
-            onValueChange={setLighting}
+            onValueChange={handleToggleLighting}
             trackColor={{ false: '#D1D5DB', true: Palette.emerald }}
             thumbColor={Palette.white}
           />
@@ -271,13 +278,15 @@ export function ControlsGrid() {
           </View>
           <Switch
             value={temperature}
-            onValueChange={setTemperature}
+            onValueChange={handleToggleTemp}
             trackColor={{ false: '#D1D5DB', true: Palette.emerald }}
             thumbColor={Palette.white}
           />
         </View>
         <Text style={[styles.controlTitle, temperature && styles.textWhite]}>Temperature</Text>
-        <Text style={[styles.controlSub, temperature && styles.textMutedDark]}>24 °Celsius</Text>
+        <Text style={[styles.controlSub, temperature && styles.textMutedDark]}>
+          {greenhouse?.temp_celsius || 24} °Celsius
+        </Text>
       </View>
 
       {/* Watering card */}
@@ -296,13 +305,15 @@ export function ControlsGrid() {
           </View>
           <Switch
             value={watering}
-            onValueChange={setWatering}
+            onValueChange={handleToggleWatering}
             trackColor={{ false: '#D1D5DB', true: Palette.emerald }}
             thumbColor={Palette.white}
           />
         </View>
         <Text style={[styles.controlTitle, watering && styles.textWhite]}>Watering</Text>
-        <Text style={[styles.controlSub, watering && styles.textMutedDark]}>200 ml</Text>
+        <Text style={[styles.controlSub, watering && styles.textMutedDark]}>
+          {greenhouse?.watering_ml || 200} ml
+        </Text>
       </View>
 
       {/* Ventilation card */}
@@ -321,13 +332,15 @@ export function ControlsGrid() {
           </View>
           <Switch
             value={ventilation}
-            onValueChange={setVentilation}
+            onValueChange={handleToggleVentilation}
             trackColor={{ false: '#D1D5DB', true: Palette.emerald }}
             thumbColor={Palette.white}
           />
         </View>
         <Text style={[styles.controlTitle, ventilation && styles.textWhite]}>Ventilation</Text>
-        <Text style={[styles.controlSub, ventilation && styles.textMutedDark]}>10 m/s</Text>
+        <Text style={[styles.controlSub, ventilation && styles.textMutedDark]}>
+          {greenhouse?.ventilation_speed || 10} m/s
+        </Text>
       </View>
     </View>
   );

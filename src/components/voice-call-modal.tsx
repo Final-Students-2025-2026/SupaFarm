@@ -3,14 +3,15 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Palette } from '@/constants/theme';
+import { callService } from '@/services/callService';
 
 export function VoiceCallModal({
   visible,
   onClose,
-  recipientName = 'Adom Organic Farms',
-  recipientRole = 'Verified Farmer',
-  recipientLocation = 'Akumadan, Ashanti',
-  phone = '+233 24 892 1042',
+  recipientName = 'Farmer / Seller',
+  recipientRole = 'Verified User',
+  recipientLocation = 'Ghana',
+  phone = '',
 }: {
   visible: boolean;
   onClose: () => void;
@@ -25,19 +26,24 @@ export function VoiceCallModal({
   const [isSpeaker, setIsSpeaker] = useState(false);
 
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
+    let activeCall: { channelName: string; endCall: () => void } | null = null;
     if (visible) {
       setCallState('connecting');
       setSeconds(0);
 
-      // Simulate connection after 2 seconds
+      // Start Realtime Call Signaling Broadcast
+      activeCall = callService.startCall(phone, 'Buyer User');
+
       const connectTimeout = setTimeout(() => {
         setCallState('connected');
-      }, 2000);
+      }, 1800);
 
-      return () => clearTimeout(connectTimeout);
+      return () => {
+        clearTimeout(connectTimeout);
+        if (activeCall) activeCall.endCall();
+      };
     }
-  }, [visible]);
+  }, [visible, phone]);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;

@@ -77,7 +77,7 @@ export function CropScannerModal({
                   <MaterialCommunityIcons name="check-decagram" size={16} color={Palette.emerald} />
                   <Text style={styles.statusText}>98% Healthy • Fruit Stage</Text>
                 </View>
-                <Text style={styles.cropTitle}>Tomato Plant (Adom Variety)</Text>
+                <Text style={styles.cropTitle}>Scanned Crop Diagnostics</Text>
               </View>
 
               <View style={styles.metricsRow}>

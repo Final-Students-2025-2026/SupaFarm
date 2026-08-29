@@ -40,8 +40,8 @@ export function AuthModal({
 
   // Step 3 Form
   const [fullName, setFullName] = useState('');
-  const [locationSearch, setLocationSearch] = useState('Accra, Greater Accra');
-  const [addressText, setAddressText] = useState('Plot 14, Agbogbloshie Market');
+  const [locationSearch, setLocationSearch] = useState('');
+  const [addressText, setAddressText] = useState('');
 
   const handleNextStep1 = () => {
     setStep(2);
@@ -56,9 +56,9 @@ export function AuthModal({
     onSuccess({
       role,
       accountType,
-      phone: phone || '+233 24 123 4567',
-      fullName: fullName || (role === 'farmer' ? 'Kofi Addo Farms' : 'Kwame Asante'),
-      location: locationSearch,
+      phone: phone || '',
+      fullName: fullName || (role === 'farmer' ? 'Farm User' : 'Buyer User'),
+      location: locationSearch || 'Ghana',
     });
     onClose();
   };
@@ -196,7 +196,7 @@ export function AuthModal({
                     <TextInput
                       value={fullName}
                       onChangeText={setFullName}
-                      placeholder={role === 'farmer' ? 'Adom Organic Farms' : 'Kwame Asante'}
+                      placeholder={role === 'farmer' ? 'Enter Farm / Business Name' : 'Enter Full Name'}
                       style={styles.textInput}
                     />
                   </View>

@@ -1,5 +1,5 @@
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -21,51 +21,7 @@ import { VoiceCallModal } from '@/components/voice-call-modal';
 import { DeliveryTrackingModal } from '@/components/delivery-tracking-modal';
 import { CropScannerModal } from '@/components/crop-scanner-modal';
 import { BottomTabInset, MaxContentWidth, Palette } from '@/constants/theme';
-
-const products: Product[] = [
-  {
-    id: 'tomato',
-    name: 'Fresh Tomatoes',
-    seller: 'Adom Organic Farms',
-    location: 'Akumadan, Ashanti',
-    price: 'GH₵ 95',
-    unit: 'crate',
-    rating: '4.9',
-    badge: 'Fresh today',
-    image: require('@/assets/images/market/tomatoes.jpg'),
-  },
-  {
-    id: 'plantain',
-    name: 'Apem Plantain',
-    seller: 'Boafo Farms',
-    location: 'Goaso, Ahafo',
-    price: 'GH₵ 180',
-    unit: 'bunch',
-    rating: '4.8',
-    image: require('@/assets/images/market/plantain.jpg'),
-  },
-  {
-    id: 'maize',
-    name: 'Dry Yellow Maize',
-    seller: 'North Star Growers',
-    location: 'Tamale, Northern',
-    price: 'GH₵ 420',
-    unit: 'bag',
-    rating: '4.7',
-    badge: 'Best value',
-    image: require('@/assets/images/market/maize.jpg'),
-  },
-  {
-    id: 'avocado',
-    name: 'Local Avocado',
-    seller: 'Aburi Green Harvest',
-    location: 'Aburi, Eastern',
-    price: 'GH₵ 35',
-    unit: 'basket',
-    rating: '4.9',
-    image: require('@/assets/images/market/avocado.jpg'),
-  },
-];
+import { marketplaceService } from '@/services/marketplaceService';
 
 const filters = ['All', 'Vegetables', 'Fruits', 'Grains', 'Tubers'];
 
@@ -73,26 +29,34 @@ export default function MarketScreen() {
   const [activeFilter, setActiveFilter] = useState('All');
   const [query, setQuery] = useState('');
   const [sortLowFirst, setSortLowFirst] = useState(false);
+  const [productsList, setProductsList] = useState<Product[]>([]);
 
   // Modal States
   const [showCallModal, setShowCallModal] = useState(false);
-  const [callRecipient, setCallRecipient] = useState({ name: 'Adom Organic Farms', location: 'Akumadan, Ashanti' });
+  const [callRecipient, setCallRecipient] = useState({ name: 'Farmer / Seller', location: 'Ghana' });
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
-  const [selectedProductForOrder, setSelectedProductForOrder] = useState(products[0]);
+  const [selectedProductForOrder, setSelectedProductForOrder] = useState<Product | null>(null);
   const [showScannerModal, setShowScannerModal] = useState(false);
 
   const { width } = useWindowDimensions();
   const columns = width >= 1000 ? 4 : width >= 700 ? 3 : 2;
   const cardWidth = `${100 / columns - 2}%` as `${number}%`;
 
+  useEffect(() => {
+    let mounted = true;
+    marketplaceService.getCropListings(activeFilter, query).then((data) => {
+      if (mounted) setProductsList(data);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [activeFilter, query]);
+
   const visibleProducts = useMemo(() => {
-    const result = products.filter((product) =>
-      `${product.name} ${product.seller} ${product.location}`
-        .toLowerCase()
-        .includes(query.toLowerCase()),
-    );
-    return sortLowFirst ? [...result].sort((a, b) => a.price.localeCompare(b.price)) : result;
-  }, [query, sortLowFirst]);
+    return sortLowFirst
+      ? [...productsList].sort((a, b) => a.price.localeCompare(b.price))
+      : productsList;
+  }, [productsList, sortLowFirst]);
 
   const handleStartCall = (name: string, location: string) => {
     setCallRecipient({ name, location });
@@ -195,10 +159,10 @@ export default function MarketScreen() {
       <DeliveryTrackingModal
         visible={showDeliveryModal}
         onClose={() => setShowDeliveryModal(false)}
-        productName={selectedProductForOrder.name}
-        farmerName={selectedProductForOrder.seller}
-        farmerLocation={selectedProductForOrder.location}
-        amount={selectedProductForOrder.price}
+        productName={selectedProductForOrder?.name}
+        farmerName={selectedProductForOrder?.seller}
+        farmerLocation={selectedProductForOrder?.location}
+        amount={selectedProductForOrder?.price}
       />
 
       <CropScannerModal

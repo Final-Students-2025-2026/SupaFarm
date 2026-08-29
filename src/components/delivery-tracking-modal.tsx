@@ -9,11 +9,11 @@ export type DeliveryMode = 'self_pickup' | 'seller_delivery' | 'platform_deliver
 export function DeliveryTrackingModal({
   visible,
   onClose,
-  productName = 'Fresh Tomatoes (2 Crates)',
-  farmerName = 'Adom Organic Farms',
-  farmerLocation = 'Akumadan, Ashanti Region',
-  buyerLocation = 'Agbogbloshie Market, Accra',
-  amount = 'GH₵ 190',
+  productName = 'Fresh Produce',
+  farmerName = 'Ghana Farmer',
+  farmerLocation = 'Farm Location',
+  buyerLocation = 'Registered Address',
+  amount = 'GH₵ 0',
 }: {
   visible: boolean;
   onClose: () => void;

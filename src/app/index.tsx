@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -25,13 +25,15 @@ import {
   GreenhouseDetailCard,
   HumidityChart,
   TelemetryMetrics,
-  samplePlants,
 } from '@/components/greenhouse-ui';
 import { VoiceCallModal } from '@/components/voice-call-modal';
 import { AuthModal } from '@/components/auth-modal';
 import { DeliveryTrackingModal } from '@/components/delivery-tracking-modal';
 import { CropScannerModal } from '@/components/crop-scanner-modal';
 import { BottomTabInset, MaxContentWidth, Palette } from '@/constants/theme';
+import { greenhouseService, type Greenhouse, type PlantRecord } from '@/services/greenhouseService';
+import { marketplaceService } from '@/services/marketplaceService';
+import { authService, type Profile } from '@/services/authService';
 
 const categories = [
   { name: 'Vegetables', icon: 'carrot', color: '#E5F5E8' },
@@ -42,92 +44,68 @@ const categories = [
   { name: 'Inputs', icon: 'watering-can-outline', color: '#E5F2F1' },
 ];
 
-const products: Product[] = [
-  {
-    id: 'tomato',
-    name: 'Fresh Tomatoes',
-    seller: 'Adom Organic Farms',
-    location: 'Akumadan, Ashanti',
-    price: 'GH₵ 95',
-    unit: 'crate',
-    rating: '4.9',
-    badge: 'Fresh today',
-    image: require('@/assets/images/market/tomatoes.jpg'),
-  },
-  {
-    id: 'plantain',
-    name: 'Apem Plantain',
-    seller: 'Boafo Farms',
-    location: 'Goaso, Ahafo',
-    price: 'GH₵ 180',
-    unit: 'bunch',
-    rating: '4.8',
-    image: require('@/assets/images/market/plantain.jpg'),
-  },
-  {
-    id: 'maize',
-    name: 'Dry Yellow Maize',
-    seller: 'North Star Growers',
-    location: 'Tamale, Northern',
-    price: 'GH₵ 420',
-    unit: 'bag',
-    rating: '4.7',
-    badge: 'Best value',
-    image: require('@/assets/images/market/maize.jpg'),
-  },
-  {
-    id: 'avocado',
-    name: 'Local Avocado',
-    seller: 'Aburi Green Harvest',
-    location: 'Aburi, Eastern',
-    price: 'GH₵ 35',
-    unit: 'basket',
-    rating: '4.9',
-    image: require('@/assets/images/market/avocado.jpg'),
-  },
-];
-
-const greenhousesList = [
-  {
-    id: 'gh1',
-    name: 'The Greenhouse I',
-    location: 'Akumadan, Ashanti',
-    plants: 12,
-    image: require('@/assets/images/market/vegetables.jpg'),
-  },
-  {
-    id: 'gh2',
-    name: 'Greenhouse Putuk',
-    location: 'Goaso, Ahafo',
-    plants: 32,
-    image: require('@/assets/images/market/plantain.jpg'),
-  },
-];
-
 export default function HomeScreen() {
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'smart' | 'plants'>('smart');
-  const [selectedGreenhouse, setSelectedGreenhouse] = useState(greenhousesList[0]);
+  
+  // API Dynamic States
+  const [greenhousesList, setGreenhousesList] = useState<Greenhouse[]>([]);
+  const [selectedGreenhouse, setSelectedGreenhouse] = useState<Greenhouse | null>(null);
+  const [productsList, setProductsList] = useState<Product[]>([]);
+  const [plantsList, setPlantsList] = useState<PlantRecord[]>([]);
+  const [userProfile, setUserProfile] = useState<Profile | null>(null);
 
   // Modal States
   const [showCallModal, setShowCallModal] = useState(false);
-  const [callRecipient, setCallRecipient] = useState({ name: 'Adom Organic Farms', location: 'Akumadan, Ashanti' });
+  const [callRecipient, setCallRecipient] = useState({ name: 'Farmer / Seller', location: 'Ghana' });
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
-  const [selectedProductForOrder, setSelectedProductForOrder] = useState(products[0]);
+  const [selectedProductForOrder, setSelectedProductForOrder] = useState<Product | null>(null);
   const [showScannerModal, setShowScannerModal] = useState(false);
 
   const { width } = useWindowDimensions();
   const isWide = width >= 820;
 
+  useEffect(() => {
+    let mounted = true;
+
+    // 1. Fetch User Profile
+    authService.getCurrentProfile().then((prof) => {
+      if (mounted) setUserProfile(prof);
+    });
+
+    // 2. Fetch Greenhouses
+    greenhouseService.getGreenhouses().then((ghs) => {
+      if (mounted && ghs.length > 0) {
+        setGreenhousesList(ghs);
+        setSelectedGreenhouse(ghs[0]);
+      }
+    });
+
+    // 3. Fetch Crop Listings
+    marketplaceService.getCropListings().then((prods) => {
+      if (mounted) setProductsList(prods);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (selectedGreenhouse) {
+      greenhouseService.getPlants(selectedGreenhouse.id).then(setPlantsList);
+    }
+  }, [selectedGreenhouse]);
+
   const visibleProducts = useMemo(
     () =>
-      products.filter((product) =>
+      productsList.filter((product) =>
         `${product.name} ${product.seller} ${product.location}`
           .toLowerCase()
           .includes(query.toLowerCase()),
       ),
-    [query],
+    [productsList, query],
   );
 
   const handleStartCall = (name: string, location: string) => {
@@ -155,7 +133,9 @@ export default function HomeScreen() {
                   <MaterialCommunityIcons name="map-marker" size={16} color={Palette.emerald} />
                   <View>
                     <Text style={styles.locationLabel}>Delivering to</Text>
-                    <Text style={styles.locationValue}>Accra, Ghana</Text>
+                    <Text style={styles.locationValue}>
+                      {userProfile?.address_text || 'Accra, Ghana'}
+                    </Text>
                   </View>
                   <MaterialCommunityIcons name="chevron-down" size={17} color={Palette.muted} />
                 </Pressable>
@@ -204,7 +184,9 @@ export default function HomeScreen() {
             <View style={styles.farmerGreetingSection}>
               <View style={styles.greetingHeader}>
                 <View>
-                  <Text style={styles.helloText}>Hello, Farmers</Text>
+                  <Text style={styles.helloText}>
+                    Hello, {userProfile?.full_name ? userProfile.full_name.split(' ')[0] : 'Farmers'}
+                  </Text>
                   <Text style={styles.dateSubText}>Sunday, 01 July 2030</Text>
                 </View>
                 <Pressable onPress={() => setShowAuthModal(true)} style={styles.avatarIconBtn}>
@@ -222,7 +204,7 @@ export default function HomeScreen() {
               <View style={styles.sectionHeaderRow}>
                 <Text style={styles.sectionHeadingTitle}>Your Greenhouses</Text>
                 <View style={styles.placesTag}>
-                  <Text style={styles.placesTagText}>12 Places</Text>
+                  <Text style={styles.placesTagText}>{greenhousesList.length} Places</Text>
                 </View>
               </View>
 
@@ -233,13 +215,13 @@ export default function HomeScreen() {
                     onPress={() => setSelectedGreenhouse(gh)}
                     style={[
                       styles.greenhouseListItem,
-                      selectedGreenhouse.id === gh.id && styles.greenhouseListItemSelected,
+                      selectedGreenhouse?.id === gh.id && styles.greenhouseListItemSelected,
                     ]}>
-                    <Image source={gh.image} style={styles.greenhouseListImg} contentFit="cover" />
+                    <Image source={gh.image || require('@/assets/images/market/vegetables.jpg')} style={styles.greenhouseListImg} contentFit="cover" />
                     <View style={styles.greenhouseListOverlay} />
                     <View style={styles.greenhouseListContent}>
                       <View style={styles.plantsBadge}>
-                        <Text style={styles.plantsBadgeText}>{gh.plants} Plants</Text>
+                        <Text style={styles.plantsBadgeText}>{gh.plants_count} Plants</Text>
                       </View>
                       <Text style={styles.greenhouseListName}>{gh.name}</Text>
                       <Text style={styles.greenhouseListLoc}>{gh.location}</Text>
@@ -252,9 +234,7 @@ export default function HomeScreen() {
             {/* Screen 3 & 4 Greenhouse Telemetry & Plant Management */}
             <View style={styles.telemetrySection}>
               <GreenhouseDetailCard
-                name={selectedGreenhouse.name}
-                location={selectedGreenhouse.location}
-                plantCount={selectedGreenhouse.plants}
+                greenhouse={selectedGreenhouse || undefined}
                 onOpenMap={() => setShowDeliveryModal(true)}
               />
 
@@ -278,11 +258,11 @@ export default function HomeScreen() {
 
               {activeTab === 'smart' ? (
                 <>
-                  {/* Telemetry Control Cards (Lighting 12W, Temp 24°C, Watering 200ml, Ventilation 10m/s) */}
-                  <ControlsGrid />
+                  {/* Telemetry Control Cards */}
+                  <ControlsGrid greenhouse={selectedGreenhouse || undefined} />
 
-                  {/* Growth Metrics (Height 120cm, Watering 45%, Fertilizer Organic, Age 3 Month) */}
-                  <TelemetryMetrics />
+                  {/* Growth Metrics */}
+                  <TelemetryMetrics greenhouse={selectedGreenhouse || undefined} />
 
                   {/* Condition Information Card */}
                   <View style={styles.infoSummaryBox}>
@@ -293,12 +273,12 @@ export default function HomeScreen() {
                   </View>
 
                   {/* Humidity Trend Chart */}
-                  <HumidityChart />
+                  <HumidityChart greenhouseId={selectedGreenhouse?.id} />
                 </>
               ) : (
                 /* Screen 4 Plants Stage & List */
                 <View style={styles.plantsTabList}>
-                  {samplePlants.map((plant) => (
+                  {plantsList.map((plant) => (
                     <View
                       key={plant.id}
                       style={[
@@ -332,7 +312,7 @@ export default function HomeScreen() {
                         </Text>
                       </View>
                       <Pressable
-                        onPress={() => handleStartCall('Adom Organic Farms', 'Akumadan, Ashanti')}
+                        onPress={() => handleStartCall(selectedGreenhouse?.name || 'Farmer', selectedGreenhouse?.location || 'Ghana')}
                         style={styles.plantCallBtn}>
                         <MaterialCommunityIcons name="phone" size={18} color={Palette.white} />
                       </Pressable>
@@ -436,17 +416,26 @@ export default function HomeScreen() {
         visible={showAuthModal}
         onClose={() => setShowAuthModal(false)}
         onSuccess={(u) => {
-          console.log('Logged in user:', u);
+          setUserProfile({
+            id: 'usr-new',
+            role: u.role,
+            account_type: u.accountType,
+            full_name: u.fullName,
+            phone_number: u.phone,
+            address_text: u.location,
+            latitude: 5.6037,
+            longitude: -0.1870,
+          });
         }}
       />
 
       <DeliveryTrackingModal
         visible={showDeliveryModal}
         onClose={() => setShowDeliveryModal(false)}
-        productName={selectedProductForOrder.name}
-        farmerName={selectedProductForOrder.seller}
-        farmerLocation={selectedProductForOrder.location}
-        amount={selectedProductForOrder.price}
+        productName={selectedProductForOrder?.name}
+        farmerName={selectedProductForOrder?.seller}
+        farmerLocation={selectedProductForOrder?.location}
+        amount={selectedProductForOrder?.price}
       />
 
       <CropScannerModal

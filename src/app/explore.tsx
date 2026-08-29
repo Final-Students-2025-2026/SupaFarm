@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -8,19 +8,25 @@ import { Chip, InfoCard, ScreenHeader, SectionHeading } from '@/components/marke
 import { CropScannerModal } from '@/components/crop-scanner-modal';
 import { VoiceCallModal } from '@/components/voice-call-modal';
 import { BottomTabInset, MaxContentWidth, Palette } from '@/constants/theme';
+import { marketplaceService, type MarketPriceItem } from '@/services/marketplaceService';
 
 const regions = ['Greater Accra', 'Ashanti', 'Eastern', 'Northern'];
 
-const marketPrices = [
-  { product: 'Tomatoes', market: 'Agbogbloshie', price: 'GH₵ 820', change: '+2.4%', up: true },
-  { product: 'Maize', market: 'Techiman', price: 'GH₵ 405', change: '-1.8%', up: false },
-  { product: 'Plantain', market: 'Kumasi Central', price: 'GH₵ 170', change: '+0.9%', up: true },
-];
-
 export default function DiscoverScreen() {
   const [region, setRegion] = useState(regions[0]);
+  const [marketPrices, setMarketPrices] = useState<MarketPriceItem[]>([]);
   const [showScannerModal, setShowScannerModal] = useState(false);
   const [showCallModal, setShowCallModal] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    marketplaceService.getMarketPrices(region).then((data) => {
+      if (mounted) setMarketPrices(data);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [region]);
 
   return (
     <View style={styles.screen}>
@@ -109,16 +115,16 @@ export default function DiscoverScreen() {
                 />
                 <View style={styles.farmBody}>
                   <View style={styles.verifiedRow}>
-                    <Text style={styles.farmName}>Adom Organic Farms</Text>
+                    <Text style={styles.farmName}>Ghana Commercial Crop Farm</Text>
                     <MaterialCommunityIcons
                       name="check-decagram"
                       size={17}
                       color={Palette.emerald}
                     />
                   </View>
-                  <Text style={styles.farmLocation}>Akumadan, Ashanti Region</Text>
+                  <Text style={styles.farmLocation}>Ashanti Region</Text>
                   <Text style={styles.farmDescription}>
-                    Family-run greenhouse vegetable farm supplying fresh, traceable tomatoes & sweet peppers.
+                    Commercial greenhouse vegetable farm supplying fresh, traceable tomatoes & sweet peppers across Ghana.
                   </Text>
                   <View style={styles.farmStats}>
                     <View>
@@ -184,8 +190,8 @@ export default function DiscoverScreen() {
       <VoiceCallModal
         visible={showCallModal}
         onClose={() => setShowCallModal(false)}
-        recipientName="Adom Organic Farms"
-        recipientLocation="Akumadan, Ashanti Region"
+        recipientName="Ghana Commercial Crop Farm"
+        recipientLocation="Ashanti Region"
       />
     </View>
   );
