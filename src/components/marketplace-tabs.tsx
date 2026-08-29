@@ -65,7 +65,7 @@ export default function MarketplaceTabs() {
             <TabButton icon="storefront-outline" label="Market" />
           </TabTrigger>
           <TabTrigger name="discover" href="/explore" asChild>
-            <TabButton icon="compass-outline" label="Discover" />
+            <TabButton icon="account-group-outline" label="Farmers" />
           </TabTrigger>
           <TabTrigger name="profile" href="/profile" asChild>
             <TabButton icon="account-outline" label="Profile" />

@@ -1,7 +1,9 @@
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useState } from 'react';
 import {
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +15,8 @@ import {
 import { Palette } from '@/constants/theme';
 import { marketplaceService } from '@/services/marketplaceService';
 import { type Product } from '@/components/marketplace-ui';
+import { GhanaLocationPicker, type GhanaLocation } from '@/components/ghana-location-picker';
+import * as ImagePicker from 'expo-image-picker';
 
 const categories = ['Vegetables', 'Fruits', 'Grains', 'Tubers', 'Livestock'];
 
@@ -33,9 +37,31 @@ export function CreateListingModal({
   const [category, setCategory] = useState('Vegetables');
   const [price, setPrice] = useState('');
   const [unit, setUnit] = useState('per 50kg bag');
-  const [location, setLocation] = useState(farmerLocation || 'Techiman, Bono East');
+  const [location, setLocation] = useState(farmerLocation || 'Techiman Market, Bono East Region');
+  const [latitude, setLatitude] = useState<number>(7.5828);
+  const [longitude, setLongitude] = useState<number>(-1.9392);
   const [description, setDescription] = useState('');
   const [badge, setBadge] = useState('Fresh Harvest');
+  const [cropImageUri, setCropImageUri] = useState('');
+
+  const handleSelectLocation = (loc: GhanaLocation) => {
+    setLocation(loc.addressText);
+    setLatitude(loc.latitude);
+    setLongitude(loc.longitude);
+  };
+
+  const pickCropPhoto = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets[0]?.uri) {
+        setCropImageUri(result.assets[0].uri);
+      }
+    } catch (e) {}
+  };
 
   const handleSubmit = async () => {
     if (!title || !price) return;
@@ -44,13 +70,15 @@ export function CreateListingModal({
     const newProduct: Product = {
       id: `crop-${Date.now()}`,
       name: title,
-      seller: farmerName || 'Kwame Asante (Farmer)',
+      seller: farmerName || 'Verified Farmer',
       location: location || 'Ghana',
       price: `GH₵ ${numPrice}`,
       unit: unit || 'per bag',
       rating: '5.0',
       badge: badge || 'Fresh',
-      image: title.toLowerCase().includes('tomato')
+      image: cropImageUri
+        ? { uri: cropImageUri }
+        : title.toLowerCase().includes('tomato')
         ? require('@/assets/images/market/tomatoes.jpg')
         : title.toLowerCase().includes('maize') || title.toLowerCase().includes('corn')
         ? require('@/assets/images/market/maize.jpg')
@@ -66,6 +94,8 @@ export function CreateListingModal({
       unit,
       priceGhc: numPrice,
       description,
+      latitude,
+      longitude,
     });
 
     onSuccess(newProduct);
@@ -80,7 +110,9 @@ export function CreateListingModal({
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.overlay}>
         <View style={styles.container}>
           <View style={styles.header}>
             <View style={styles.titleWrap}>
@@ -92,7 +124,10 @@ export function CreateListingModal({
             </Pressable>
           </View>
 
-          <ScrollView contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            contentContainerStyle={styles.scrollBody}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}>
             <View style={styles.formGroup}>
               <Text style={styles.label}>Crop Title / Produce Name *</Text>
               <TextInput
@@ -145,14 +180,31 @@ export function CreateListingModal({
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Farm / Market Location</Text>
-              <TextInput
+              <Text style={styles.label}>Farm / Market Location (Ghana)</Text>
+              <GhanaLocationPicker
                 value={location}
-                onChangeText={setLocation}
-                placeholder="e.g. Techiman Market, Bono East Region"
-                placeholderTextColor="#8A958D"
-                style={styles.input}
+                onSelectLocation={handleSelectLocation}
+                placeholder="Search town, market, or farm area in Ghana..."
               />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Crop Photo (Optional)</Text>
+              <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+                <Pressable onPress={pickCropPhoto} style={styles.photoBtn}>
+                  <MaterialCommunityIcons name="camera-plus" size={20} color={Palette.emerald} />
+                  <Text style={styles.photoBtnText}>
+                    {cropImageUri ? 'Photo Selected ✓' : 'Upload Crop Photo'}
+                  </Text>
+                </Pressable>
+                <TextInput
+                  value={cropImageUri}
+                  onChangeText={setCropImageUri}
+                  placeholder="Or paste photo URL..."
+                  placeholderTextColor="#8A958D"
+                  style={[styles.input, { flex: 1 }]}
+                />
+              </View>
             </View>
 
             <View style={styles.formGroup}>
@@ -188,7 +240,7 @@ export function CreateListingModal({
             </Pressable>
           </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -253,6 +305,22 @@ const styles = StyleSheet.create({
     borderColor: Palette.line,
     color: Palette.ink,
     fontSize: 14,
+  },
+  photoBtn: {
+    height: 48,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: Palette.paleMint,
+    borderWidth: 1,
+    borderColor: Palette.line,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  photoBtnText: {
+    color: Palette.forest,
+    fontSize: 12,
+    fontWeight: '800',
   },
   chipRow: {
     flexDirection: 'row',

@@ -1,7 +1,9 @@
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useState } from 'react';
 import {
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,9 +13,11 @@ import {
 } from 'react-native';
 
 import { Palette } from '@/constants/theme';
+import { authService, type UserRole, type AccountType } from '@/services/authService';
+import { GhanaLocationPicker, type GhanaLocation } from '@/components/ghana-location-picker';
+import * as ImagePicker from 'expo-image-picker';
 
-export type UserRole = 'farmer' | 'buyer';
-export type AccountType = 'individual' | 'business';
+export type { UserRole, AccountType };
 
 export function AuthModal({
   visible,
@@ -28,20 +32,67 @@ export function AuthModal({
     phone: string;
     fullName: string;
     location: string;
+    latitude?: number;
+    longitude?: number;
+    profileImageUrl?: string;
+    farmBackgroundImageUrl?: string;
   }) => void;
 }) {
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [role, setRole] = useState<UserRole>('farmer');
   const [accountType, setAccountType] = useState<AccountType>('individual');
 
-  // Step 2 Form
+  // Form Fields
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-
-  // Step 3 Form
   const [fullName, setFullName] = useState('');
   const [locationSearch, setLocationSearch] = useState('');
   const [addressText, setAddressText] = useState('');
+  const [latitude, setLatitude] = useState<number>(5.6037);
+  const [longitude, setLongitude] = useState<number>(-0.1870);
+  const [profileImageUrl, setProfileImageUrl] = useState('');
+  const [farmBackgroundImageUrl, setFarmBackgroundImageUrl] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSelectLocation = (loc: GhanaLocation) => {
+    setLocationSearch(loc.addressText);
+    setLatitude(loc.latitude);
+    setLongitude(loc.longitude);
+  };
+
+  const pickImage = async (type: 'profile' | 'farm') => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.7,
+      });
+
+      if (!result.canceled && result.assets[0]?.uri) {
+        if (type === 'profile') {
+          setProfileImageUrl(result.assets[0].uri);
+        } else {
+          setFarmBackgroundImageUrl(result.assets[0].uri);
+        }
+      }
+    } catch (e) {}
+  };
+
+  const handleLogin = async () => {
+    if (!phone || !password) return;
+    setLoading(true);
+    const { profile } = await authService.signInWithPhonePassword({ phone, password });
+    setLoading(false);
+    onSuccess({
+      role: profile.role,
+      accountType: profile.account_type,
+      phone: profile.phone_number,
+      fullName: profile.full_name,
+      location: profile.address_text || 'Ghana',
+    });
+    onClose();
+  };
 
   const handleNextStep1 = () => {
     setStep(2);
@@ -52,13 +103,31 @@ export function AuthModal({
     setStep(3);
   };
 
-  const handleComplete = () => {
-    onSuccess({
+  const handleCompleteSignUp = async () => {
+    setLoading(true);
+    const { profile } = await authService.signUp3Step({
       role,
       accountType,
       phone: phone || '',
-      fullName: fullName || (role === 'farmer' ? 'Farm User' : 'Buyer User'),
-      location: locationSearch || 'Ghana',
+      password: password || '123456',
+      fullName: fullName || (role === 'farmer' ? 'Farm Seller' : 'Produce Buyer'),
+      locationSearch: locationSearch || addressText || 'Ghana',
+      latitude,
+      longitude,
+      profileImageUrl,
+      farmBackgroundImageUrl,
+    });
+    setLoading(false);
+    onSuccess({
+      role: profile.role,
+      accountType: profile.account_type,
+      phone: profile.phone_number,
+      fullName: profile.full_name,
+      location: profile.address_text || 'Ghana',
+      latitude: profile.latitude,
+      longitude: profile.longitude,
+      profileImageUrl: profile.profile_image_url,
+      farmBackgroundImageUrl: profile.farm_background_image_url,
     });
     onClose();
   };
@@ -67,20 +136,93 @@ export function AuthModal({
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.overlay}>
         <View style={styles.container}>
+          {/* Top Bar with Mode Tabs */}
           <View style={styles.header}>
-            <View style={styles.stepIndicator}>
-              <Text style={styles.stepText}>Step {step} of 3</Text>
+            <View style={styles.modeTabs}>
+              <Pressable
+                onPress={() => setAuthMode('login')}
+                style={[styles.modeTab, authMode === 'login' && styles.modeTabActive]}>
+                <Text style={[styles.modeTabText, authMode === 'login' && styles.modeTabTextActive]}>
+                  Log In
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setAuthMode('signup')}
+                style={[styles.modeTab, authMode === 'signup' && styles.modeTabActive]}>
+                <Text style={[styles.modeTabText, authMode === 'signup' && styles.modeTabTextActive]}>
+                  Sign Up
+                </Text>
+              </Pressable>
             </View>
             <Pressable onPress={onClose} style={styles.closeBtn}>
               <MaterialCommunityIcons name="close" size={22} color={Palette.ink} />
             </Pressable>
           </View>
 
-          <ScrollView contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
-            {step === 1 && (
+          <ScrollView
+            contentContainerStyle={styles.scrollBody}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}>
+            {authMode === 'login' ? (
+              /* LOG IN MODE */
               <View style={styles.stepContainer}>
+                <Text style={styles.title}>Welcome Back</Text>
+                <Text style={styles.subtitle}>Enter your phone number and password to log in to SupaFarm.</Text>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.fieldLabel}>Ghana Phone Number</Text>
+                  <View style={styles.inputWrap}>
+                    <MaterialCommunityIcons name="phone" size={20} color={Palette.muted} />
+                    <TextInput
+                      value={phone}
+                      onChangeText={setPhone}
+                      placeholder="+233 24 000 0000"
+                      placeholderTextColor="#8A958D"
+                      keyboardType="phone-pad"
+                      style={styles.textInput}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.fieldLabel}>Password</Text>
+                  <View style={styles.inputWrap}>
+                    <MaterialCommunityIcons name="lock-outline" size={20} color={Palette.muted} />
+                    <TextInput
+                      value={password}
+                      onChangeText={setPassword}
+                      placeholder="••••••••"
+                      placeholderTextColor="#8A958D"
+                      secureTextEntry
+                      style={styles.textInput}
+                    />
+                  </View>
+                </View>
+
+                <Pressable onPress={handleLogin} style={styles.primaryBtn}>
+                  <Text style={styles.primaryBtnText}>{loading ? 'Logging In…' : 'Log In'}</Text>
+                  <MaterialCommunityIcons name="arrow-right" size={18} color={Palette.white} />
+                </Pressable>
+
+                <Pressable onPress={() => setAuthMode('signup')} style={styles.switchModeWrap}>
+                  <Text style={styles.switchModeText}>
+                    Don't have an account? <Text style={styles.switchModeBold}>Sign Up</Text>
+                  </Text>
+                </Pressable>
+              </View>
+            ) : (
+              /* SIGN UP MODE */
+              <>
+                <View style={styles.stepIndicator}>
+                  <Text style={styles.stepText}>Step {step} of 3</Text>
+                </View>
+
+                {step === 1 && (
+                  <View style={styles.stepContainer}>
                 <Text style={styles.title}>Join SupaFarm</Text>
                 <Text style={styles.subtitle}>Select your primary account role in the Ghanaian crop market.</Text>
 
@@ -206,17 +348,12 @@ export function AuthModal({
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.fieldLabel}>Search Location / Pin Address</Text>
-                  <View style={styles.inputWrap}>
-                    <MaterialCommunityIcons name="map-marker-radius" size={20} color={Palette.emerald} />
-                    <TextInput
-                      value={locationSearch}
-                      onChangeText={setLocationSearch}
-                      placeholder="Search town, market, or farm area..."
-                      placeholderTextColor="#8A958D"
-                      style={styles.textInput}
-                    />
-                  </View>
+                  <Text style={styles.fieldLabel}>Search Ghana Town / Market / Farm Location</Text>
+                  <GhanaLocationPicker
+                    value={locationSearch}
+                    onSelectLocation={handleSelectLocation}
+                    placeholder="Search town, market, or farm area in Ghana..."
+                  />
                 </View>
 
                 <View style={styles.inputGroup}>
@@ -233,11 +370,44 @@ export function AuthModal({
                   </View>
                 </View>
 
+                <View style={styles.inputGroup}>
+                  <Text style={styles.fieldLabel}>Profile Picture (Photo or URL)</Text>
+                  <View style={styles.imagePickerRow}>
+                    <Pressable onPress={() => pickImage('profile')} style={styles.pickImageBtn}>
+                      <MaterialCommunityIcons name="image-plus" size={20} color={Palette.forest} />
+                      <Text style={styles.pickImageText}>Choose Photo</Text>
+                    </Pressable>
+                    <TextInput
+                      value={profileImageUrl}
+                      onChangeText={setProfileImageUrl}
+                      placeholder="Or paste image URL (https://...)"
+                      placeholderTextColor="#8A958D"
+                      style={[styles.textInput, styles.urlInput]}
+                    />
+                  </View>
+                </View>
+
                 {role === 'farmer' && (
-                  <View style={styles.imageUploadBox}>
-                    <MaterialCommunityIcons name="camera-plus-outline" size={24} color={Palette.emerald} />
-                    <Text style={styles.uploadTitle}>Upload Farm Background Photo</Text>
-                    <Text style={styles.uploadSub}>Show buyers your crops & greenhouse setup</Text>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.fieldLabel}>Farm Background Photo</Text>
+                    <Pressable onPress={() => pickImage('farm')} style={styles.imageUploadBox}>
+                      <MaterialCommunityIcons name="camera-plus-outline" size={24} color={Palette.emerald} />
+                      <Text style={styles.uploadTitle}>
+                        {farmBackgroundImageUrl ? 'Photo Selected ✓' : 'Upload Farm Background Photo'}
+                      </Text>
+                      <Text style={styles.uploadSub}>
+                        {farmBackgroundImageUrl
+                          ? 'Tap to change farm background image'
+                          : 'Show buyers your crops & greenhouse setup'}
+                      </Text>
+                    </Pressable>
+                    <TextInput
+                      value={farmBackgroundImageUrl}
+                      onChangeText={setFarmBackgroundImageUrl}
+                      placeholder="Or paste farm image URL (https://...)"
+                      placeholderTextColor="#8A958D"
+                      style={styles.textInput}
+                    />
                   </View>
                 )}
 
@@ -245,16 +415,24 @@ export function AuthModal({
                   <Pressable onPress={() => setStep(2)} style={styles.backBtn}>
                     <Text style={styles.backBtnText}>Back</Text>
                   </Pressable>
-                  <Pressable onPress={handleComplete} style={[styles.primaryBtn, { flex: 1 }]}>
-                    <Text style={styles.primaryBtnText}>Finish & Start</Text>
+                  <Pressable onPress={handleCompleteSignUp} style={[styles.primaryBtn, { flex: 1 }]}>
+                    <Text style={styles.primaryBtnText}>{loading ? 'Creating Account…' : 'Finish & Start'}</Text>
                     <MaterialCommunityIcons name="check" size={18} color={Palette.white} />
                   </Pressable>
                 </View>
+
+                <Pressable onPress={() => setAuthMode('login')} style={styles.switchModeWrap}>
+                  <Text style={styles.switchModeText}>
+                    Already have an account? <Text style={styles.switchModeBold}>Log In</Text>
+                  </Text>
+                </Pressable>
               </View>
             )}
-          </ScrollView>
+          </>
+        )}
+      </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -273,7 +451,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingTop: 14,
     paddingBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -281,11 +459,48 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Palette.line,
   },
+  modeTabs: {
+    flexDirection: 'row',
+    backgroundColor: Palette.canvas,
+    borderRadius: 12,
+    padding: 3,
+    gap: 4,
+  },
+  modeTab: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  modeTabActive: {
+    backgroundColor: Palette.forest,
+  },
+  modeTabText: {
+    color: Palette.muted,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  modeTabTextActive: {
+    color: Palette.white,
+    fontWeight: '900',
+  },
   stepIndicator: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
     backgroundColor: Palette.mint,
+    alignSelf: 'flex-start',
+  },
+  switchModeWrap: {
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  switchModeText: {
+    color: Palette.muted,
+    fontSize: 13,
+  },
+  switchModeBold: {
+    color: Palette.emerald,
+    fontWeight: '800',
   },
   stepText: {
     color: Palette.forest,
@@ -366,17 +581,21 @@ const styles = StyleSheet.create({
   },
   rowTypes: {
     flexDirection: 'row',
+    alignItems: 'stretch',
+    justifyContent: 'center',
     gap: 10,
   },
   typeChip: {
     flex: 1,
+    minHeight: 48,
     paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
+    paddingHorizontal: 10,
+    borderRadius: 12,
     backgroundColor: Palette.canvas,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: Palette.line,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   typeChipActive: {
     backgroundColor: Palette.forest,
@@ -386,12 +605,43 @@ const styles = StyleSheet.create({
     color: Palette.ink,
     fontSize: 12,
     fontWeight: '700',
+    textAlign: 'center',
   },
   typeTextActive: {
     color: Palette.white,
   },
   inputGroup: {
     gap: 6,
+  },
+  imagePickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pickImageBtn: {
+    height: 48,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: Palette.paleMint,
+    borderWidth: 1,
+    borderColor: Palette.line,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  pickImageText: {
+    color: Palette.forest,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  urlInput: {
+    flex: 1,
+    height: 48,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: Palette.canvas,
+    borderWidth: 1,
+    borderColor: Palette.line,
   },
   inputWrap: {
     height: 48,

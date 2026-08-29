@@ -1,6 +1,8 @@
+import { useLocalSearchParams } from 'expo-router';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,23 +21,28 @@ import {
 } from '@/components/marketplace-ui';
 import { VoiceCallModal } from '@/components/voice-call-modal';
 import { DeliveryTrackingModal } from '@/components/delivery-tracking-modal';
+import { AuthModal } from '@/components/auth-modal';
 import { CreateListingModal } from '@/components/create-listing-modal';
 import { BottomTabInset, MaxContentWidth, Palette } from '@/constants/theme';
 import { marketplaceService } from '@/services/marketplaceService';
+import { authService, type Profile } from '@/services/authService';
 
 const filters = ['All', 'Vegetables', 'Fruits', 'Grains', 'Tubers'];
 
 export default function MarketScreen() {
+  const params = useLocalSearchParams<{ category?: string }>();
   const [activeFilter, setActiveFilter] = useState('All');
   const [query, setQuery] = useState('');
   const [sortLowFirst, setSortLowFirst] = useState(false);
   const [productsList, setProductsList] = useState<Product[]>([]);
+  const [userProfile, setUserProfile] = useState<Profile | null>(null);
 
   // Modal States
   const [showCallModal, setShowCallModal] = useState(false);
   const [callRecipient, setCallRecipient] = useState({ name: 'Farmer / Seller', location: 'Ghana' });
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
   const [selectedProductForOrder, setSelectedProductForOrder] = useState<Product | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [showCreateListingModal, setShowCreateListingModal] = useState(false);
 
   const { width } = useWindowDimensions();
@@ -43,7 +50,16 @@ export default function MarketScreen() {
   const cardWidth = `${100 / columns - 2}%` as `${number}%`;
 
   useEffect(() => {
+    if (params.category && filters.includes(params.category)) {
+      setActiveFilter(params.category);
+    }
+  }, [params.category]);
+
+  useEffect(() => {
     let mounted = true;
+    authService.getCurrentProfile().then((prof) => {
+      if (mounted) setUserProfile(prof);
+    });
     marketplaceService.getCropListings(activeFilter, query).then((data) => {
       if (mounted) setProductsList(data);
     });
@@ -68,6 +84,23 @@ export default function MarketScreen() {
     setShowDeliveryModal(true);
   };
 
+  const handleOpenCreateListing = () => {
+    if (!userProfile) {
+      setShowAuthModal(true);
+    } else if (userProfile.role !== 'farmer') {
+      Alert.alert(
+        'Farmer Account Required',
+        'Posting crop listings for sale is restricted to registered Farmers. Would you like to switch or register as a Farmer?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Register as Farmer', onPress: () => setShowAuthModal(true) },
+        ]
+      );
+    } else {
+      setShowCreateListingModal(true);
+    }
+  };
+
   return (
     <View style={styles.screen}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -81,7 +114,7 @@ export default function MarketScreen() {
               right={
                 <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
                   <Pressable
-                    onPress={() => setShowCreateListingModal(true)}
+                    onPress={handleOpenCreateListing}
                     style={styles.postButton}>
                     <MaterialCommunityIcons name="plus" size={18} color={Palette.white} />
                     <Text style={styles.postButtonText}>Sell Crop</Text>
@@ -148,7 +181,7 @@ export default function MarketScreen() {
                 <Text style={styles.emptyTitle}>No crop listings found in database</Text>
                 <Text style={styles.emptyCopy}>There are currently no produce listings for this filter. Tap '+ Sell Crop' to post a listing!</Text>
                 <Pressable
-                  onPress={() => setShowCreateListingModal(true)}
+                  onPress={handleOpenCreateListing}
                   style={styles.emptyBtn}>
                   <Text style={styles.emptyBtnText}>Post Crop Listing</Text>
                 </Pressable>
@@ -183,6 +216,25 @@ export default function MarketScreen() {
         farmerName={selectedProductForOrder?.seller}
         farmerLocation={selectedProductForOrder?.location}
         amount={selectedProductForOrder?.price}
+      />
+
+      <AuthModal
+        visible={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onSuccess={(u) => {
+          const newProf: Profile = {
+            id: 'usr-new',
+            role: u.role,
+            account_type: u.accountType,
+            full_name: u.fullName,
+            phone_number: u.phone,
+            address_text: u.location,
+            latitude: 5.6037,
+            longitude: -0.1870,
+          };
+          setUserProfile(newProf);
+          authService.updateProfile(newProf.id, newProf);
+        }}
       />
 
       <CreateListingModal

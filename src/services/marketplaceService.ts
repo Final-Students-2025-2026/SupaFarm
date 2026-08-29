@@ -76,6 +76,8 @@ export const marketplaceService = {
     unit: string;
     priceGhc: number;
     description?: string;
+    latitude?: number;
+    longitude?: number;
   }): Promise<boolean> {
     try {
       const { error } = await supabase.from('crop_listings').insert([
@@ -87,6 +89,8 @@ export const marketplaceService = {
           price_ghc: newListing.priceGhc,
           description: newListing.description,
           badge: newListing.cropType || 'Fresh Harvest',
+          latitude: newListing.latitude || 5.6037,
+          longitude: newListing.longitude || -0.1870,
           status: 'available',
         },
       ]);

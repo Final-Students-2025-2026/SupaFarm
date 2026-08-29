@@ -3,6 +3,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -24,7 +25,7 @@ import {
 import { VoiceCallModal } from '@/components/voice-call-modal';
 import { AuthModal } from '@/components/auth-modal';
 import { DeliveryTrackingModal } from '@/components/delivery-tracking-modal';
-import { CropScannerModal } from '@/components/crop-scanner-modal';
+
 import { CreateListingModal } from '@/components/create-listing-modal';
 import { BottomTabInset, MaxContentWidth, Palette } from '@/constants/theme';
 import { marketplaceService, type MarketPriceItem } from '@/services/marketplaceService';
@@ -54,7 +55,6 @@ export default function HomeScreen() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
   const [selectedProductForOrder, setSelectedProductForOrder] = useState<Product | null>(null);
-  const [showScannerModal, setShowScannerModal] = useState(false);
   const [showCreateListingModal, setShowCreateListingModal] = useState(false);
 
   const { width } = useWindowDimensions();
@@ -115,6 +115,23 @@ export default function HomeScreen() {
     setShowDeliveryModal(true);
   };
 
+  const handleOpenCreateListing = () => {
+    if (!userProfile) {
+      setShowAuthModal(true);
+    } else if (userProfile.role !== 'farmer') {
+      Alert.alert(
+        'Farmer Account Required',
+        'Posting produce for sale is restricted to registered Farmers. Would you like to switch or register as a Farmer?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Register as Farmer', onPress: () => setShowAuthModal(true) },
+        ]
+      );
+    } else {
+      setShowCreateListingModal(true);
+    }
+  };
+
   return (
     <View style={styles.screen}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -164,13 +181,7 @@ export default function HomeScreen() {
 
                 <View style={styles.heroBtnRow}>
                   <Pressable
-                    onPress={() => {
-                      if (!userProfile) {
-                        setShowAuthModal(true);
-                      } else {
-                        setShowCreateListingModal(true);
-                      }
-                    }}
+                    onPress={handleOpenCreateListing}
                     style={({ pressed }) => [styles.sellButton, pressed && styles.pressed]}>
                     <MaterialCommunityIcons name="plus" size={18} color={Palette.white} />
                     <Text style={styles.sellButtonText}>Post Crop for Sale</Text>
@@ -189,25 +200,25 @@ export default function HomeScreen() {
             {/* User Greeting & Quick Stats */}
             <View style={styles.greetingSection}>
               <View style={styles.greetingHeader}>
-                <View>
-                  <Text style={styles.helloText}>
+                <View style={styles.greetingTextBlock}>
+                  <Text style={styles.helloText} numberOfLines={1}>
                     Welcome, {userProfile?.full_name ? userProfile.full_name : 'Valued Trader'}!
                   </Text>
-                  <Text style={styles.roleSubText}>
-                    {userProfile?.role === 'farmer' ? 'Verified Crop Farmer' : 'Registered Produce Buyer'} • {userProfile?.address_text || 'Ghana Market Hub'}
+                  <Text style={styles.roleSubText} numberOfLines={1}>
+                    {userProfile?.role === 'farmer' ? 'Verified Crop Farmer' : 'Produce Buyer'} • {userProfile?.address_text || 'Ghana'}
                   </Text>
                 </View>
 
                 {userProfile ? (
                   <Pressable
-                    onPress={() => setShowCreateListingModal(true)}
+                    onPress={handleOpenCreateListing}
                     style={styles.postProduceHeaderBtn}>
-                    <MaterialCommunityIcons name="store-plus" size={20} color={Palette.white} />
-                    <Text style={styles.postProduceHeaderBtnText}>+ Sell Produce</Text>
+                    <MaterialCommunityIcons name="store-plus" size={18} color={Palette.white} />
+                    <Text style={styles.postProduceHeaderBtnText}>+ Sell</Text>
                   </Pressable>
                 ) : (
                   <Pressable onPress={() => setShowAuthModal(true)} style={styles.loginPillBtn}>
-                    <Text style={styles.loginPillText}>Sign Up / Login</Text>
+                    <Text style={styles.loginPillText}>Sign In</Text>
                   </Pressable>
                 )}
               </View>
@@ -216,7 +227,6 @@ export default function HomeScreen() {
                 value={query}
                 onChangeText={setQuery}
                 placeholder="Search tomatoes, maize, plantain, region, farmer..."
-                onFilterPress={() => setShowScannerModal(true)}
               />
             </View>
 
@@ -224,19 +234,22 @@ export default function HomeScreen() {
             <View style={styles.section}>
               <SectionHeading
                 title="Shop by Crop Category"
-                action={selectedCategory === 'All' ? 'View all' : 'Reset'}
-                onAction={() => setSelectedCategory('All')}
+                action="Browse all"
+                onAction={() => router.push('/market')}
               />
               <View style={styles.categoryGrid}>
                 {categories.map((category) => (
                   <Pressable
                     key={category.name}
-                    onPress={() =>
-                      setSelectedCategory(selectedCategory === category.name ? 'All' : category.name)
-                    }
+                    onPress={() => {
+                      // Navigate to Market tab with this category pre-selected
+                      router.push({
+                        pathname: '/market',
+                        params: { category: category.name },
+                      });
+                    }}
                     style={({ pressed }) => [
                       styles.categoryItem,
-                      selectedCategory === category.name && styles.categoryItemActive,
                       isWide && styles.categoryItemWide,
                       pressed && styles.pressed,
                     ]}>
@@ -265,7 +278,7 @@ export default function HomeScreen() {
                   </Text>
                 </View>
                 <Pressable
-                  onPress={() => setShowCreateListingModal(true)}
+                  onPress={handleOpenCreateListing}
                   style={styles.inlineAddBtn}>
                   <MaterialCommunityIcons name="plus-circle-outline" size={18} color={Palette.emerald} />
                   <Text style={styles.inlineAddBtnText}>Add Crop</Text>
@@ -292,7 +305,7 @@ export default function HomeScreen() {
                   <Text style={styles.emptyTitle}>No crop listings found</Text>
                   <Text style={styles.emptyCopy}>Be the first farmer to post crops for sale in this category!</Text>
                   <Pressable
-                    onPress={() => setShowCreateListingModal(true)}
+                    onPress={handleOpenCreateListing}
                     style={styles.emptyCreateBtn}>
                     <Text style={styles.emptyCreateBtnText}>Post Crop Listing</Text>
                   </Pressable>
@@ -328,13 +341,7 @@ export default function HomeScreen() {
 
       {/* Floating Sell Action Button */}
       <Pressable
-        onPress={() => {
-          if (!userProfile) {
-            setShowAuthModal(true);
-          } else {
-            setShowCreateListingModal(true);
-          }
-        }}
+        onPress={handleOpenCreateListing}
         style={styles.floatingSellBtn}>
         <MaterialCommunityIcons name="store-plus" size={24} color={Palette.white} />
         <Text style={styles.floatingSellText}>Sell Crop</Text>
@@ -535,14 +542,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 10,
   },
+  greetingTextBlock: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
+  },
   helloText: {
     color: Palette.forestDark,
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '900',
   },
   roleSubText: {
     color: Palette.muted,
-    fontSize: 12,
+    fontSize: 11,
     marginTop: 2,
   },
   postProduceHeaderBtn: {
