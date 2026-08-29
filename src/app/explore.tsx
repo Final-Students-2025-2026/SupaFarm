@@ -1,10 +1,9 @@
 import { Image } from 'expo-image';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { VoiceCallModal } from '@/components/voice-call-modal';
 import { BottomTabInset, MaxContentWidth, Palette } from '@/constants/theme';
 import { authService, type Profile } from '@/services/authService';
 
@@ -14,8 +13,6 @@ export default function DiscoverScreen() {
   const [farmers, setFarmers] = useState<Profile[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
-  const [showCallModal, setShowCallModal] = useState(false);
-  const [callTarget, setCallTarget] = useState({ name: '', location: '' });
 
   useEffect(() => {
     let mounted = true;
@@ -33,8 +30,10 @@ export default function DiscoverScreen() {
   );
 
   const handleCall = (farmer: Profile) => {
-    setCallTarget({ name: farmer.full_name, location: farmer.address_text ?? 'Ghana' });
-    setShowCallModal(true);
+    const rawPhone = farmer.phone_number ? farmer.phone_number.replace(/[^0-9+]/g, '') : '+233240000000';
+    Linking.openURL(`tel:${rawPhone}`).catch(() => {
+      Alert.alert('Phone Call', `Dialing farmer ${farmer.full_name} at ${farmer.phone_number || '+233 24 000 0000'}`);
+    });
   };
 
   return (
@@ -152,12 +151,26 @@ export default function DiscoverScreen() {
                         </View>
                       ) : null}
 
-                      <Pressable
-                        onPress={() => handleCall(farmer)}
-                        style={styles.callBtn}>
-                        <MaterialCommunityIcons name="phone" size={16} color={Palette.white} />
-                        <Text style={styles.callBtnText}>Call Farmer</Text>
-                      </Pressable>
+                      <View style={styles.cardActionsRow}>
+                        <Pressable
+                          onPress={() => handleCall(farmer)}
+                          style={styles.callBtn}>
+                          <MaterialCommunityIcons name="phone" size={16} color={Palette.white} />
+                          <Text style={styles.callBtnText}>Call Farmer</Text>
+                        </Pressable>
+
+                        <Pressable
+                          onPress={() => {
+                            const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+                              farmer.address_text || 'Ghana'
+                            )}&travelmode=driving`;
+                            Linking.openURL(url);
+                          }}
+                          style={styles.dirBtn}>
+                          <MaterialCommunityIcons name="google-maps" size={16} color={Palette.forest} />
+                          <Text style={styles.dirBtnText}>Directions</Text>
+                        </Pressable>
+                      </View>
                     </View>
                   </View>
                 ))}
@@ -167,12 +180,6 @@ export default function DiscoverScreen() {
         </ScrollView>
       </SafeAreaView>
 
-      <VoiceCallModal
-        visible={showCallModal}
-        onClose={() => setShowCallModal(false)}
-        recipientName={callTarget.name}
-        recipientLocation={callTarget.location}
-      />
     </View>
   );
 }
@@ -360,19 +367,42 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
-  callBtn: {
+  cardActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     marginTop: 4,
+  },
+  callBtn: {
+    flex: 1,
     height: 44,
     borderRadius: 12,
     backgroundColor: Palette.emerald,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
   },
   callBtnText: {
     color: Palette.white,
-    fontSize: 14,
-    fontWeight: '900',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  dirBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: Palette.mint,
+    borderWidth: 1,
+    borderColor: Palette.line,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  dirBtnText: {
+    color: Palette.forest,
+    fontSize: 13,
+    fontWeight: '800',
   },
 });

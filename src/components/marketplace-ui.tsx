@@ -115,18 +115,28 @@ export function SectionHeading({
 export function ProductCard({
   product,
   style,
+  onPress,
   onCall,
   onOrder,
 }: {
   product: Product;
   style?: StyleProp<ViewStyle>;
+  onPress?: () => void;
   onCall?: () => void;
   onOrder?: () => void;
 }) {
   const [favorite, setFavorite] = useState(false);
 
+  const handleCardPress = () => {
+    if (onPress) {
+      onPress();
+    }
+  };
+
   return (
-    <View style={[styles.productCard, style]}>
+    <Pressable
+      onPress={handleCardPress}
+      style={({ pressed }) => [styles.productCard, style, pressed && styles.pressed]}>
       <View style={styles.productImageWrap}>
         <Image source={product.image} style={styles.productImage} contentFit="cover" />
         {product.badge && (
@@ -169,27 +179,9 @@ export function ProductCard({
             <Text style={styles.productPrice}>{product.price}</Text>
             <Text style={styles.productUnit}> / {product.unit}</Text>
           </View>
-
-          <View style={styles.cardActions}>
-            {onCall && (
-              <Pressable
-                accessibilityLabel={`Call ${product.seller}`}
-                onPress={onCall}
-                style={({ pressed }) => [styles.callButton, pressed && styles.pressed]}>
-                <MaterialCommunityIcons name="phone" size={15} color={Palette.white} />
-                <Text style={styles.callBtnText}>Call</Text>
-              </Pressable>
-            )}
-            <Pressable
-              accessibilityLabel={`Order ${product.name}`}
-              onPress={onOrder}
-              style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}>
-              <MaterialCommunityIcons name="cart-outline" size={17} color={Palette.forestDark} />
-            </Pressable>
-          </View>
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -451,41 +443,6 @@ const styles = StyleSheet.create({
   productUnit: {
     color: Palette.muted,
     fontSize: 11,
-  },
-  cardActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  callButton: {
-    height: 34,
-    paddingHorizontal: 10,
-    borderRadius: 17,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-    backgroundColor: Palette.emerald,
-    elevation: 2,
-    shadowColor: Palette.forestDark,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 3,
-  },
-  callBtnText: {
-    color: Palette.white,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  addButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Palette.paleMint,
-    borderWidth: 1,
-    borderColor: Palette.line,
   },
   screenHeader: {
     flexDirection: 'row',

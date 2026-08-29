@@ -117,6 +117,8 @@ CREATE POLICY "Public Read Market Intelligence" ON public.market_intelligence FO
 CREATE POLICY "Allow All Insert Profiles" ON public.profiles FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow All Update Profiles" ON public.profiles FOR UPDATE USING (true);
 CREATE POLICY "Allow All Insert Crop Listings" ON public.crop_listings FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow All Update Crop Listings" ON public.crop_listings FOR UPDATE USING (true);
+CREATE POLICY "Allow All Delete Crop Listings" ON public.crop_listings FOR DELETE USING (true);
 CREATE POLICY "Allow All Insert Orders" ON public.orders FOR INSERT WITH CHECK (true);
 
 -- 6. Supabase Storage Bucket Setup for Images

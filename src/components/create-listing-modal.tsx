@@ -1,5 +1,5 @@
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -48,6 +48,12 @@ export function CreateListingModal({
   const [badge, setBadge] = useState('Fresh Harvest');
   const [cropImageUri, setCropImageUri] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (visible && farmerLocation) {
+      setLocation(farmerLocation);
+    }
+  }, [visible, farmerLocation]);
 
   const handleSelectLocation = (loc: GhanaLocation) => {
     setLocation(loc.addressText);

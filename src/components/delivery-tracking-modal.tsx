@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Palette } from '@/constants/theme';
+import { InAppMapDirectionsModal } from '@/components/in-app-map-directions-modal';
 
 export type DeliveryMode = 'self_pickup' | 'seller_delivery' | 'platform_delivery';
 
@@ -25,6 +26,19 @@ export function DeliveryTrackingModal({
 }) {
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('platform_delivery');
   const [orderConfirmed, setOrderConfirmed] = useState(false);
+  const [showDirections, setShowDirections] = useState(false);
+  const [directionsOrigin, setDirectionsOrigin] = useState('');
+  const [directionsOriginName, setDirectionsOriginName] = useState('');
+  const [directionsDestination, setDirectionsDestination] = useState('');
+  const [directionsDestinationName, setDirectionsDestinationName] = useState('');
+
+  const openDirections = (origin: string, originName: string, dest: string, destName: string) => {
+    setDirectionsOrigin(origin);
+    setDirectionsOriginName(originName);
+    setDirectionsDestination(dest);
+    setDirectionsDestinationName(destName);
+    setShowDirections(true);
+  };
 
   const handleConfirmOrder = () => {
     setOrderConfirmed(true);
@@ -47,8 +61,10 @@ export function DeliveryTrackingModal({
           </View>
 
           <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-            {/* Map Directions Box */}
-            <View style={styles.mapSimContainer}>
+            {/* In-App Map Directions Banner */}
+            <Pressable
+              onPress={() => openDirections(farmerLocation, farmerName, buyerLocation, 'Delivery Address')}
+              style={({ pressed }) => [styles.mapSimContainer, pressed && { opacity: 0.9 }]}>
               <View style={styles.mapGraphic}>
                 <View style={styles.routeLine} />
                 <View style={styles.farmerPin}>
@@ -62,10 +78,11 @@ export function DeliveryTrackingModal({
                 </View>
               </View>
               <View style={styles.mapOverlayPill}>
-                <MaterialCommunityIcons name="navigation-variant" size={14} color={Palette.emerald} />
-                <Text style={styles.mapDistanceText}>Distance: 24 km • Route via N6 Highway</Text>
+                <MaterialCommunityIcons name="navigation-variant" size={16} color={Palette.emerald} />
+                <Text style={styles.mapDistanceText}>Tap to view In-App Route & Directions</Text>
+                <MaterialCommunityIcons name="chevron-right" size={13} color={Palette.forest} />
               </View>
-            </View>
+            </Pressable>
 
             {/* Farm & Buyer Points */}
             <View style={styles.locationCard}>
@@ -76,6 +93,12 @@ export function DeliveryTrackingModal({
                   <Text style={styles.locName}>{farmerName}</Text>
                   <Text style={styles.locSub}>{farmerLocation}</Text>
                 </View>
+                <Pressable
+                  onPress={() => openDirections('My Location', 'My Location', farmerLocation, farmerName)}
+                  style={styles.dirPill}>
+                  <MaterialCommunityIcons name="directions" size={14} color={Palette.emerald} />
+                  <Text style={styles.dirPillText}>Directions</Text>
+                </Pressable>
               </View>
 
               <View style={styles.locationDivider} />
@@ -87,6 +110,12 @@ export function DeliveryTrackingModal({
                   <Text style={styles.locName}>My Registered Location</Text>
                   <Text style={styles.locSub}>{buyerLocation}</Text>
                 </View>
+                <Pressable
+                  onPress={() => openDirections(farmerLocation, farmerName, buyerLocation, 'Delivery Address')}
+                  style={styles.dirPill}>
+                  <MaterialCommunityIcons name="directions" size={14} color={Palette.emerald} />
+                  <Text style={styles.dirPillText}>Route</Text>
+                </Pressable>
               </View>
             </View>
 
@@ -349,6 +378,22 @@ const styles = StyleSheet.create({
   },
   locationTextWrap: {
     flex: 1,
+  },
+  dirPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: Palette.white,
+    borderWidth: 1,
+    borderColor: Palette.line,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  dirPillText: {
+    color: Palette.forest,
+    fontSize: 11,
+    fontWeight: '800',
   },
   locLabel: {
     color: Palette.muted,

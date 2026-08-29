@@ -727,6 +727,9 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 6,
   },
+  primaryBtnDisabled: {
+    opacity: 0.65,
+  },
   primaryBtnText: {
     color: Palette.white,
     fontSize: 14,

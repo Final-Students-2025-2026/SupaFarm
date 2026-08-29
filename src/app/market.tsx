@@ -3,6 +3,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,8 +20,8 @@ import {
   SearchField,
   type Product,
 } from '@/components/marketplace-ui';
-import { VoiceCallModal } from '@/components/voice-call-modal';
 import { DeliveryTrackingModal } from '@/components/delivery-tracking-modal';
+import { ProductDetailModal } from '@/components/product-detail-modal';
 import { AuthModal } from '@/components/auth-modal';
 import { CreateListingModal } from '@/components/create-listing-modal';
 import { BottomTabInset, MaxContentWidth, Palette } from '@/constants/theme';
@@ -42,6 +43,7 @@ export default function MarketScreen() {
   const [callRecipient, setCallRecipient] = useState({ name: 'Farmer / Seller', location: 'Ghana' });
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
   const [selectedProductForOrder, setSelectedProductForOrder] = useState<Product | null>(null);
+  const [selectedDetailProduct, setSelectedDetailProduct] = useState<Product | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showCreateListingModal, setShowCreateListingModal] = useState(false);
 
@@ -55,14 +57,16 @@ export default function MarketScreen() {
     }
   }, [params.category]);
 
+  const refreshListings = () => {
+    marketplaceService.getCropListings(activeFilter, query).then(setProductsList);
+  };
+
   useEffect(() => {
     let mounted = true;
     authService.getCurrentProfile().then((prof) => {
       if (mounted) setUserProfile(prof);
     });
-    marketplaceService.getCropListings(activeFilter, query).then((data) => {
-      if (mounted) setProductsList(data);
-    });
+    refreshListings();
     return () => {
       mounted = false;
     };
@@ -75,8 +79,10 @@ export default function MarketScreen() {
   }, [productsList, sortLowFirst]);
 
   const handleStartCall = (name: string, location: string) => {
-    setCallRecipient({ name, location });
-    setShowCallModal(true);
+    const defaultPhone = '+233240000000';
+    Linking.openURL(`tel:${defaultPhone}`).catch(() => {
+      Alert.alert('Call Farmer', `Calling ${name} at ${location}`);
+    });
   };
 
   const handleStartOrder = (product: Product) => {
@@ -169,8 +175,7 @@ export default function MarketScreen() {
                     <ProductCard
                       product={product}
                       style={styles.gridProductCard}
-                      onCall={() => handleStartCall(product.seller, product.location)}
-                      onOrder={() => handleStartOrder(product)}
+                      onPress={() => setSelectedDetailProduct(product)}
                     />
                   </View>
                 ))}
@@ -202,13 +207,19 @@ export default function MarketScreen() {
       </SafeAreaView>
 
       {/* Modals */}
-      <VoiceCallModal
-        visible={showCallModal}
-        onClose={() => setShowCallModal(false)}
-        recipientName={callRecipient.name}
-        recipientLocation={callRecipient.location}
+      <ProductDetailModal
+        visible={!!selectedDetailProduct}
+        product={selectedDetailProduct}
+        onClose={() => setSelectedDetailProduct(null)}
+        onCall={(prod) => {
+          setSelectedDetailProduct(null);
+          handleStartCall(prod.seller, prod.location);
+        }}
+        onOrder={(prod) => {
+          setSelectedDetailProduct(null);
+          handleStartOrder(prod);
+        }}
       />
-
       <DeliveryTrackingModal
         visible={showDeliveryModal}
         onClose={() => setShowDeliveryModal(false)}
@@ -240,8 +251,11 @@ export default function MarketScreen() {
       <CreateListingModal
         visible={showCreateListingModal}
         onClose={() => setShowCreateListingModal(false)}
-        onSuccess={(newProduct) => {
-          setProductsList((prev) => [newProduct, ...prev]);
+        farmerId={userProfile?.id}
+        farmerName={userProfile?.full_name}
+        farmerLocation={userProfile?.address_text}
+        onSuccess={() => {
+          refreshListings();
         }}
       />
     </View>

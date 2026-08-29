@@ -146,25 +146,29 @@ export const marketplaceService = {
   async updateCropListing(
     id: string,
     updates: Partial<Pick<CropListingRecord, 'title' | 'price_ghc' | 'unit' | 'description' | 'badge' | 'status'>>
-  ): Promise<boolean> {
+  ): Promise<{ success: boolean; error?: string }> {
     try {
       const { error } = await supabase
         .from('crop_listings')
         .update(updates)
         .eq('id', id);
-      return !error;
-    } catch (_) {}
-    return false;
+      if (error) return { success: false, error: error.message };
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Update failed' };
+    }
   },
 
-  async deleteCropListing(id: string): Promise<boolean> {
+  async deleteCropListing(id: string): Promise<{ success: boolean; error?: string }> {
     try {
       const { error } = await supabase
         .from('crop_listings')
         .delete()
         .eq('id', id);
-      return !error;
-    } catch (_) {}
-    return false;
+      if (error) return { success: false, error: error.message };
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Delete failed' };
+    }
   },
 };

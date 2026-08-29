@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Palette } from '@/constants/theme';
 import { callService } from '@/services/callService';
@@ -138,6 +138,18 @@ export function VoiceCallModal({
               <Text style={styles.controlLabel}>{isSpeaker ? 'Speaker On' : 'Speaker'}</Text>
             </Pressable>
           </View>
+
+          {/* Option to place native phone call */}
+          {phone ? (
+            <Pressable
+              onPress={() => {
+                Linking.openURL(`tel:${phone.replace(/[^0-9+]/g, '')}`);
+              }}
+              style={styles.nativeDialBtn}>
+              <MaterialCommunityIcons name="phone-outgoing" size={16} color={Palette.white} />
+              <Text style={styles.nativeDialBtnText}>Switch to Native Phone Call ({phone})</Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
     </Modal>
@@ -282,6 +294,21 @@ const styles = StyleSheet.create({
     bottom: -20,
     color: Palette.white,
     fontSize: 11,
+    fontWeight: '700',
+  },
+  nativeDialBtn: {
+    marginTop: 36,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  nativeDialBtnText: {
+    color: Palette.white,
+    fontSize: 12,
     fontWeight: '700',
   },
 });

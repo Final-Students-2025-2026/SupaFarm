@@ -4,8 +4,10 @@ import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Linking,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -26,6 +28,7 @@ import { VoiceCallModal } from '@/components/voice-call-modal';
 import { AuthModal } from '@/components/auth-modal';
 import { DeliveryTrackingModal } from '@/components/delivery-tracking-modal';
 
+import { ProductDetailModal } from '@/components/product-detail-modal';
 import { CreateListingModal } from '@/components/create-listing-modal';
 import { BottomTabInset, MaxContentWidth, Palette } from '@/constants/theme';
 import { marketplaceService, type MarketPriceItem } from '@/services/marketplaceService';
@@ -55,6 +58,7 @@ export default function HomeScreen() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
   const [selectedProductForOrder, setSelectedProductForOrder] = useState<Product | null>(null);
+  const [selectedDetailProduct, setSelectedDetailProduct] = useState<Product | null>(null);
   const [showCreateListingModal, setShowCreateListingModal] = useState(false);
 
   const { width } = useWindowDimensions();
@@ -89,8 +93,13 @@ export default function HomeScreen() {
     };
   }, []);
 
-  const refreshListings = () => {
-    marketplaceService.getCropListings(selectedCategory, query).then(setProductsList);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const refreshListings = async () => {
+    setRefreshing(true);
+    const prods = await marketplaceService.getCropListings(selectedCategory, query);
+    setProductsList(prods);
+    setRefreshing(false);
   };
 
   useEffect(() => {
@@ -106,8 +115,10 @@ export default function HomeScreen() {
   }, [productsList, query]);
 
   const handleStartCall = (name: string, location: string) => {
-    setCallRecipient({ name, location });
-    setShowCallModal(true);
+    const defaultPhone = '+233240000000';
+    Linking.openURL(`tel:${defaultPhone}`).catch(() => {
+      Alert.alert('Call Farmer', `Calling ${name} at ${location}`);
+    });
   };
 
   const handleStartOrder = (product: Product) => {
@@ -137,7 +148,15 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}>
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={refreshListings}
+              colors={[Palette.emerald]}
+              tintColor={Palette.emerald}
+            />
+          }>
           <View style={styles.container}>
             {/* Header Bar */}
             <View style={styles.topBar}>
@@ -259,7 +278,7 @@ export default function HomeScreen() {
             {/* Crop Marketplace Feed */}
             <View style={styles.section}>
               <View style={styles.feedHeaderRow}>
-                <View>
+                <View style={{ flex: 1 }}>
                   <Text style={styles.feedTitle}>
                     {query ? `Results for "${query}"` : 'Fresh Produce Listings'}
                   </Text>
@@ -267,12 +286,19 @@ export default function HomeScreen() {
                     Direct farmer phone numbers • Voice trade enabled
                   </Text>
                 </View>
-                <Pressable
-                  onPress={handleOpenCreateListing}
-                  style={styles.inlineAddBtn}>
-                  <MaterialCommunityIcons name="plus-circle-outline" size={18} color={Palette.emerald} />
-                  <Text style={styles.inlineAddBtnText}>Add Crop</Text>
-                </Pressable>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Pressable
+                    onPress={refreshListings}
+                    style={({ pressed }) => [styles.refreshFeedBtn, pressed && styles.pressed]}>
+                    <MaterialCommunityIcons name="refresh" size={18} color={Palette.forest} />
+                  </Pressable>
+                  <Pressable
+                    onPress={handleOpenCreateListing}
+                    style={styles.inlineAddBtn}>
+                    <MaterialCommunityIcons name="plus-circle-outline" size={18} color={Palette.emerald} />
+                    <Text style={styles.inlineAddBtnText}>Add Crop</Text>
+                  </Pressable>
+                </View>
               </View>
 
               {visibleProducts.length > 0 ? (
@@ -284,8 +310,7 @@ export default function HomeScreen() {
                     <ProductCard
                       key={product.id}
                       product={product}
-                      onCall={() => handleStartCall(product.seller, product.location)}
-                      onOrder={() => handleStartOrder(product)}
+                      onPress={() => setSelectedDetailProduct(product)}
                     />
                   ))}
                 </ScrollView>
@@ -338,12 +363,6 @@ export default function HomeScreen() {
       </Pressable>
 
       {/* Modals */}
-      <VoiceCallModal
-        visible={showCallModal}
-        onClose={() => setShowCallModal(false)}
-        recipientName={callRecipient.name}
-        recipientLocation={callRecipient.location}
-      />
 
       <AuthModal
         visible={showAuthModal}
@@ -373,6 +392,20 @@ export default function HomeScreen() {
         farmerName={selectedProductForOrder?.seller}
         farmerLocation={selectedProductForOrder?.location}
         amount={selectedProductForOrder?.price}
+      />
+
+      <ProductDetailModal
+        visible={!!selectedDetailProduct}
+        product={selectedDetailProduct}
+        onClose={() => setSelectedDetailProduct(null)}
+        onCall={(prod) => {
+          setSelectedDetailProduct(null);
+          handleStartCall(prod.seller, prod.location);
+        }}
+        onOrder={(prod) => {
+          setSelectedDetailProduct(null);
+          handleStartOrder(prod);
+        }}
       />
 
 
@@ -646,6 +679,14 @@ const styles = StyleSheet.create({
     color: Palette.muted,
     fontSize: 11,
     marginTop: 2,
+  },
+  refreshFeedBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Palette.mint,
   },
   inlineAddBtn: {
     flexDirection: 'row',
