@@ -17,6 +17,9 @@ import {
   SearchField,
   type Product,
 } from '@/components/marketplace-ui';
+import { VoiceCallModal } from '@/components/voice-call-modal';
+import { DeliveryTrackingModal } from '@/components/delivery-tracking-modal';
+import { CropScannerModal } from '@/components/crop-scanner-modal';
 import { BottomTabInset, MaxContentWidth, Palette } from '@/constants/theme';
 
 const products: Product[] = [
@@ -70,6 +73,14 @@ export default function MarketScreen() {
   const [activeFilter, setActiveFilter] = useState('All');
   const [query, setQuery] = useState('');
   const [sortLowFirst, setSortLowFirst] = useState(false);
+
+  // Modal States
+  const [showCallModal, setShowCallModal] = useState(false);
+  const [callRecipient, setCallRecipient] = useState({ name: 'Adom Organic Farms', location: 'Akumadan, Ashanti' });
+  const [showDeliveryModal, setShowDeliveryModal] = useState(false);
+  const [selectedProductForOrder, setSelectedProductForOrder] = useState(products[0]);
+  const [showScannerModal, setShowScannerModal] = useState(false);
+
   const { width } = useWindowDimensions();
   const columns = width >= 1000 ? 4 : width >= 700 ? 3 : 2;
   const cardWidth = `${100 / columns - 2}%` as `${number}%`;
@@ -83,6 +94,16 @@ export default function MarketScreen() {
     return sortLowFirst ? [...result].sort((a, b) => a.price.localeCompare(b.price)) : result;
   }, [query, sortLowFirst]);
 
+  const handleStartCall = (name: string, location: string) => {
+    setCallRecipient({ name, location });
+    setShowCallModal(true);
+  };
+
+  const handleStartOrder = (product: Product) => {
+    setSelectedProductForOrder(product);
+    setShowDeliveryModal(true);
+  };
+
   return (
     <View style={styles.screen}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -91,13 +112,13 @@ export default function MarketScreen() {
           contentContainerStyle={styles.scrollContent}>
           <View style={styles.container}>
             <ScreenHeader
-              title="Marketplace"
-              subtitle="Verified produce from growers across Ghana"
+              title="SupaFarm Market"
+              subtitle="Verified fresh produce direct from growers across Ghana"
               right={
-                <Pressable style={styles.basketButton}>
-                  <MaterialCommunityIcons name="basket-outline" size={22} color={Palette.forest} />
+                <Pressable onPress={() => setShowDeliveryModal(true)} style={styles.basketButton}>
+                  <MaterialCommunityIcons name="truck-delivery-outline" size={22} color={Palette.forest} />
                   <View style={styles.basketCount}>
-                    <Text style={styles.basketCountText}>2</Text>
+                    <Text style={styles.basketCountText}>1</Text>
                   </View>
                 </Pressable>
               }
@@ -107,6 +128,7 @@ export default function MarketScreen() {
               value={query}
               onChangeText={setQuery}
               placeholder="Search products, farms, or regions"
+              onFilterPress={() => setShowScannerModal(true)}
             />
 
             <ScrollView
@@ -126,12 +148,12 @@ export default function MarketScreen() {
             <View style={styles.resultsBar}>
               <View>
                 <Text style={styles.resultsTitle}>{visibleProducts.length} fresh listings</Text>
-                <Text style={styles.resultsCopy}>Prices shown in Ghana cedis</Text>
+                <Text style={styles.resultsCopy}>Direct farmer contacts • Voice call ready</Text>
               </View>
               <Pressable
                 onPress={() => setSortLowFirst((current) => !current)}
                 style={({ pressed }) => [styles.sortButton, pressed && styles.pressed]}>
-                <MaterialCommunityIcons name="sort" size={18} color={Palette.green} />
+                <MaterialCommunityIcons name="sort" size={18} color={Palette.emerald} />
                 <Text style={styles.sortText}>{sortLowFirst ? 'Price: low first' : 'Sort'}</Text>
               </Pressable>
             </View>
@@ -139,23 +161,50 @@ export default function MarketScreen() {
             <View style={styles.productGrid}>
               {visibleProducts.map((product) => (
                 <View key={product.id} style={[styles.productCell, { width: cardWidth }]}>
-                  <ProductCard product={product} style={styles.gridProductCard} />
+                  <ProductCard
+                    product={product}
+                    style={styles.gridProductCard}
+                    onCall={() => handleStartCall(product.seller, product.location)}
+                    onOrder={() => handleStartOrder(product)}
+                  />
                 </View>
               ))}
             </View>
 
             <View style={styles.assurance}>
-              <MaterialCommunityIcons name="shield-check" size={28} color={Palette.green} />
+              <MaterialCommunityIcons name="shield-check" size={28} color={Palette.emerald} />
               <View style={styles.assuranceCopy}>
-                <Text style={styles.assuranceTitle}>Trade with confidence</Text>
+                <Text style={styles.assuranceTitle}>Direct Voice & 3-Tier Delivery</Text>
                 <Text style={styles.assuranceText}>
-                  Verified sellers, transparent pricing, and protected payments.
+                  No middlemen. Speak directly to farmers, choose your delivery tier, and pay cash on delivery.
                 </Text>
               </View>
             </View>
           </View>
         </ScrollView>
       </SafeAreaView>
+
+      {/* Modals */}
+      <VoiceCallModal
+        visible={showCallModal}
+        onClose={() => setShowCallModal(false)}
+        recipientName={callRecipient.name}
+        recipientLocation={callRecipient.location}
+      />
+
+      <DeliveryTrackingModal
+        visible={showDeliveryModal}
+        onClose={() => setShowDeliveryModal(false)}
+        productName={selectedProductForOrder.name}
+        farmerName={selectedProductForOrder.seller}
+        farmerLocation={selectedProductForOrder.location}
+        amount={selectedProductForOrder.price}
+      />
+
+      <CropScannerModal
+        visible={showScannerModal}
+        onClose={() => setShowScannerModal(false)}
+      />
     </View>
   );
 }
@@ -182,10 +231,12 @@ const styles = StyleSheet.create({
   basketButton: {
     width: 46,
     height: 46,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Palette.mint,
+    borderWidth: 1,
+    borderColor: Palette.line,
   },
   basketCount: {
     position: 'absolute',
@@ -231,7 +282,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    borderRadius: 6,
+    borderRadius: 10,
     backgroundColor: Palette.white,
     borderWidth: 1,
     borderColor: Palette.line,
@@ -258,14 +309,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    borderRadius: 8,
+    borderRadius: 16,
     backgroundColor: Palette.mint,
+    borderWidth: 1,
+    borderColor: Palette.line,
   },
   assuranceCopy: {
     flex: 1,
   },
   assuranceTitle: {
-    color: Palette.forest,
+    color: Palette.forestDark,
     fontSize: 14,
     fontWeight: '900',
   },

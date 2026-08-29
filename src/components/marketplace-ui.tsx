@@ -33,7 +33,7 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
       </View>
       {!compact && (
         <Text style={styles.brandText}>
-          Agri<Text style={styles.brandAccent}>Market</Text>
+          Supa<Text style={styles.brandAccent}>Farm</Text>
         </Text>
       )}
     </View>
@@ -66,10 +66,12 @@ export function SearchField({
   value,
   onChangeText,
   placeholder = 'Search fresh produce near you',
+  onFilterPress,
 }: {
   value: string;
   onChangeText: (value: string) => void;
   placeholder?: string;
+  onFilterPress?: () => void;
 }) {
   return (
     <View style={styles.searchField}>
@@ -82,7 +84,7 @@ export function SearchField({
         style={styles.searchInput}
         returnKeyType="search"
       />
-      <Pressable accessibilityLabel="Filter search" style={styles.filterButton}>
+      <Pressable onPress={onFilterPress} accessibilityLabel="Filter search" style={styles.filterButton}>
         <MaterialCommunityIcons name="tune-variant" size={20} color={Palette.white} />
       </Pressable>
     </View>
@@ -113,9 +115,13 @@ export function SectionHeading({
 export function ProductCard({
   product,
   style,
+  onCall,
+  onOrder,
 }: {
   product: Product;
   style?: StyleProp<ViewStyle>;
+  onCall?: () => void;
+  onOrder?: () => void;
 }) {
   const [favorite, setFavorite] = useState(false);
 
@@ -159,11 +165,27 @@ export function ProductCard({
           </Text>
         </View>
         <View style={styles.priceRow}>
-          <Text style={styles.productPrice}>{product.price}</Text>
-          <Text style={styles.productUnit}> / {product.unit}</Text>
-          <Pressable accessibilityLabel={`Add ${product.name} to basket`} style={styles.addButton}>
-            <MaterialCommunityIcons name="plus" size={20} color={Palette.white} />
-          </Pressable>
+          <View style={styles.priceTextWrap}>
+            <Text style={styles.productPrice}>{product.price}</Text>
+            <Text style={styles.productUnit}> / {product.unit}</Text>
+          </View>
+
+          <View style={styles.cardActions}>
+            {onCall && (
+              <Pressable
+                accessibilityLabel={`Call ${product.seller}`}
+                onPress={onCall}
+                style={styles.callButton}>
+                <MaterialCommunityIcons name="phone" size={16} color={Palette.white} />
+              </Pressable>
+            )}
+            <Pressable
+              accessibilityLabel={`Order ${product.name}`}
+              onPress={onOrder}
+              style={styles.addButton}>
+              <MaterialCommunityIcons name="plus" size={20} color={Palette.white} />
+            </Pressable>
+          </View>
         </View>
       </View>
     </View>
@@ -411,6 +433,11 @@ const styles = StyleSheet.create({
     marginTop: 10,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  priceTextWrap: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
   },
   productPrice: {
     color: Palette.forest,
@@ -421,14 +448,26 @@ const styles = StyleSheet.create({
     color: Palette.muted,
     fontSize: 11,
   },
-  addButton: {
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  callButton: {
     width: 32,
     height: 32,
-    marginLeft: 'auto',
     borderRadius: 7,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Palette.green,
+    backgroundColor: Palette.emerald,
+  },
+  addButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Palette.forest,
   },
   screenHeader: {
     flexDirection: 'row',

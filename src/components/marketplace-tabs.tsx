@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   iconWrapActive: {
-    backgroundColor: Palette.green,
+    backgroundColor: Palette.emerald,
   },
   tabLabel: {
     color: Palette.muted,
@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   tabLabelActive: {
-    color: Palette.forest,
+    color: Palette.forestDark,
     fontWeight: '800',
   },
   pressed: {

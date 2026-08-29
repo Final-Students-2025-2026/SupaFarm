@@ -4,17 +4,47 @@ import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-nat
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ScreenHeader } from '@/components/marketplace-ui';
+import { AuthModal } from '@/components/auth-modal';
+import { DeliveryTrackingModal } from '@/components/delivery-tracking-modal';
 import { BottomTabInset, MaxContentWidth, Palette } from '@/constants/theme';
-
-const menuItems = [
-  { label: 'My orders', caption: 'Track and review your purchases', icon: 'package-variant-closed' },
-  { label: 'Saved produce', caption: 'Products and farms you follow', icon: 'heart-outline' },
-  { label: 'Delivery addresses', caption: 'Home, shop, and market locations', icon: 'map-marker-outline' },
-  { label: 'Payment methods', caption: 'Mobile money and saved cards', icon: 'wallet-outline' },
-];
 
 export default function ProfileScreen() {
   const [notifications, setNotifications] = useState(true);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showDeliveryModal, setShowDeliveryModal] = useState(false);
+  const [userProfile, setUserProfile] = useState({
+    name: 'Kwame Asante',
+    role: 'Verified Buyer',
+    phone: '+233 24 892 1042',
+    location: 'Agbogbloshie Market, Accra',
+  });
+
+  const menuItems = [
+    {
+      label: 'My Orders & Deliveries',
+      caption: 'Track live 3-tier shipments and view receipt',
+      icon: 'package-variant-closed',
+      onPress: () => setShowDeliveryModal(true),
+    },
+    {
+      label: 'Saved Farms & Produce',
+      caption: 'Farms you follow and favorite crop listings',
+      icon: 'heart-outline',
+      onPress: () => {},
+    },
+    {
+      label: 'Delivery & Farm Location',
+      caption: userProfile.location,
+      icon: 'map-marker-outline',
+      onPress: () => setShowAuthModal(true),
+    },
+    {
+      label: 'Payment Mode',
+      caption: 'Cash on Delivery (COD)',
+      icon: 'cash-multiple',
+      onPress: () => {},
+    },
+  ];
 
   return (
     <View style={styles.screen}>
@@ -24,10 +54,10 @@ export default function ProfileScreen() {
           contentContainerStyle={styles.scrollContent}>
           <View style={styles.container}>
             <ScreenHeader
-              title="My account"
-              subtitle="Manage your market activity and preferences"
+              title="SupaFarm Account"
+              subtitle="Manage your profile, role registration, and market orders"
               right={
-                <Pressable style={styles.settingsButton}>
+                <Pressable onPress={() => setShowAuthModal(true)} style={styles.settingsButton}>
                   <MaterialCommunityIcons name="cog-outline" size={22} color={Palette.ink} />
                 </Pressable>
               }
@@ -35,24 +65,26 @@ export default function ProfileScreen() {
 
             <View style={styles.profileCard}>
               <View style={styles.avatar}>
-                <Text style={styles.avatarText}>KA</Text>
+                <Text style={styles.avatarText}>
+                  {userProfile.name.split(' ').map((n) => n[0]).join('')}
+                </Text>
               </View>
               <View style={styles.identity}>
                 <View style={styles.nameRow}>
-                  <Text style={styles.name}>Kwame Asante</Text>
+                  <Text style={styles.name}>{userProfile.name}</Text>
                   <MaterialCommunityIcons
                     name="check-decagram"
                     size={17}
-                    color={Palette.green}
+                    color={Palette.emerald}
                   />
                 </View>
-                <Text style={styles.phone}>+233 24 000 0000</Text>
+                <Text style={styles.phone}>{userProfile.phone}</Text>
                 <View style={styles.buyerPill}>
-                  <Text style={styles.buyerPillText}>Verified buyer</Text>
+                  <Text style={styles.buyerPillText}>{userProfile.role}</Text>
                 </View>
               </View>
-              <Pressable style={styles.editButton}>
-                <MaterialCommunityIcons name="pencil-outline" size={17} color={Palette.green} />
+              <Pressable onPress={() => setShowAuthModal(true)} style={styles.editButton}>
+                <MaterialCommunityIcons name="pencil-outline" size={17} color={Palette.forestDark} />
               </Pressable>
             </View>
 
@@ -68,8 +100,8 @@ export default function ProfileScreen() {
               </View>
               <View style={styles.statDivider} />
               <View style={styles.stat}>
-                <Text style={styles.statValue}>4.8</Text>
-                <Text style={styles.statLabel}>Buyer rating</Text>
+                <Text style={styles.statValue}>4.9 ★</Text>
+                <Text style={styles.statLabel}>Rating</Text>
               </View>
             </View>
 
@@ -77,9 +109,10 @@ export default function ProfileScreen() {
               {menuItems.map((item) => (
                 <Pressable
                   key={item.label}
+                  onPress={item.onPress}
                   style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}>
                   <View style={styles.menuIcon}>
-                    <MaterialCommunityIcons name={item.icon} size={21} color={Palette.green} />
+                    <MaterialCommunityIcons name={item.icon} size={21} color={Palette.emerald} />
                   </View>
                   <View style={styles.menuCopy}>
                     <Text style={styles.menuLabel}>{item.label}</Text>
@@ -90,41 +123,60 @@ export default function ProfileScreen() {
               ))}
               <View style={styles.menuItem}>
                 <View style={styles.menuIcon}>
-                  <MaterialCommunityIcons name="bell-outline" size={21} color={Palette.green} />
+                  <MaterialCommunityIcons name="bell-outline" size={21} color={Palette.emerald} />
                 </View>
                 <View style={styles.menuCopy}>
-                  <Text style={styles.menuLabel}>Price alerts</Text>
-                  <Text style={styles.menuCaption}>Updates on products you watch</Text>
+                  <Text style={styles.menuLabel}>Price Alerts</Text>
+                  <Text style={styles.menuCaption}>Real-time updates on Ghanaian market trends</Text>
                 </View>
                 <Switch
                   value={notifications}
                   onValueChange={setNotifications}
-                  trackColor={{ false: '#C8D0CA', true: '#7BC18D' }}
-                  thumbColor={notifications ? Palette.green : Palette.white}
+                  trackColor={{ false: '#C8D0CA', true: Palette.emeraldLight }}
+                  thumbColor={notifications ? Palette.emerald : Palette.white}
                 />
               </View>
             </View>
 
-            <View style={styles.sellerBanner}>
+            {/* Switch Role Banner */}
+            <Pressable onPress={() => setShowAuthModal(true)} style={styles.sellerBanner}>
               <View style={styles.sellerIcon}>
                 <MaterialCommunityIcons name="tractor" size={27} color={Palette.white} />
               </View>
               <View style={styles.sellerCopy}>
-                <Text style={styles.sellerTitle}>Grow and sell with us</Text>
+                <Text style={styles.sellerTitle}>Switch Role / Register as Farmer</Text>
                 <Text style={styles.sellerText}>
-                  Reach buyers across Ghana with your farm profile.
+                  Set up your greenhouse telemetry, post fresh crops, and receive buyer calls.
                 </Text>
               </View>
               <MaterialCommunityIcons name="arrow-right" size={21} color={Palette.white} />
-            </View>
+            </Pressable>
 
-            <Pressable style={styles.helpButton}>
-              <MaterialCommunityIcons name="lifebuoy" size={20} color={Palette.green} />
-              <Text style={styles.helpText}>Help and support</Text>
+            <Pressable onPress={() => setShowAuthModal(true)} style={styles.helpButton}>
+              <MaterialCommunityIcons name="shield-account-outline" size={20} color={Palette.emerald} />
+              <Text style={styles.helpText}>3-Step Sign-up & Account Security</Text>
             </Pressable>
           </View>
         </ScrollView>
       </SafeAreaView>
+
+      <AuthModal
+        visible={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onSuccess={(u) => {
+          setUserProfile({
+            name: u.fullName,
+            role: u.role === 'farmer' ? 'Verified Farmer' : `Buyer (${u.accountType || 'Individual'})`,
+            phone: u.phone,
+            location: u.location,
+          });
+        }}
+      />
+
+      <DeliveryTrackingModal
+        visible={showDeliveryModal}
+        onClose={() => setShowDeliveryModal(false)}
+      />
     </View>
   );
 }
@@ -151,7 +203,7 @@ const styles = StyleSheet.create({
   settingsButton: {
     width: 44,
     height: 44,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Palette.white,
@@ -163,7 +215,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    borderRadius: 8,
+    borderRadius: 16,
     backgroundColor: Palette.white,
     borderWidth: 1,
     borderColor: Palette.line,
@@ -174,7 +226,7 @@ const styles = StyleSheet.create({
     borderRadius: 31,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Palette.forest,
+    backgroundColor: Palette.forestDark,
   },
   avatarText: {
     color: Palette.white,
@@ -204,18 +256,18 @@ const styles = StyleSheet.create({
     marginTop: 7,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 4,
-    backgroundColor: Palette.mint,
+    borderRadius: 6,
+    backgroundColor: Palette.emeraldLight,
   },
   buyerPillText: {
-    color: Palette.green,
-    fontSize: 9,
+    color: Palette.pillTeal,
+    fontSize: 10,
     fontWeight: '800',
   },
   editButton: {
     width: 36,
     height: 36,
-    borderRadius: 8,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Palette.paleMint,
@@ -225,15 +277,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 8,
+    borderRadius: 16,
     backgroundColor: Palette.mint,
+    borderWidth: 1,
+    borderColor: Palette.line,
   },
   stat: {
     flex: 1,
     alignItems: 'center',
   },
   statValue: {
-    color: Palette.forest,
+    color: Palette.forestDark,
     fontSize: 20,
     fontWeight: '900',
   },
@@ -246,11 +300,11 @@ const styles = StyleSheet.create({
   statDivider: {
     width: 1,
     height: 35,
-    backgroundColor: '#C8DECE',
+    backgroundColor: Palette.line,
   },
   menu: {
     overflow: 'hidden',
-    borderRadius: 8,
+    borderRadius: 16,
     backgroundColor: Palette.white,
     borderWidth: 1,
     borderColor: Palette.line,
@@ -267,7 +321,7 @@ const styles = StyleSheet.create({
   menuIcon: {
     width: 40,
     height: 40,
-    borderRadius: 8,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Palette.paleMint,
@@ -291,16 +345,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 13,
-    borderRadius: 8,
-    backgroundColor: Palette.forest,
+    borderRadius: 16,
+    backgroundColor: Palette.forestDark,
   },
   sellerIcon: {
     width: 47,
     height: 47,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Palette.leaf,
+    backgroundColor: Palette.emerald,
   },
   sellerCopy: {
     flex: 1,
@@ -322,13 +376,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: Palette.white,
     borderWidth: 1,
     borderColor: Palette.line,
   },
   helpText: {
-    color: Palette.green,
+    color: Palette.forestDark,
     fontSize: 12,
     fontWeight: '800',
   },

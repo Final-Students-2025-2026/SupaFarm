@@ -3,19 +3,27 @@ import '@/global.css';
 import { Platform } from 'react-native';
 
 export const Palette = {
+  forestDark: '#093322',
+  forestCard: '#062E1E',
   forest: '#174D2D',
   green: '#247A43',
   leaf: '#46A35F',
+  emerald: '#10B981',
+  emeraldLight: '#D1FAE5',
   mint: '#E8F5EB',
+  mintDark: '#D2E8D7',
   paleMint: '#F3F9F4',
+  pillTeal: '#0F766E',
+  stageReproductive: '#F97316',
+  stageMaturation: '#064E3B',
   sun: '#F3B63F',
   earth: '#8B5A2B',
-  tomato: '#D9573F',
+  tomato: '#EF4444',
   ink: '#17201A',
   muted: '#68746C',
-  line: '#DDE6DF',
+  line: '#E2EAE4',
   white: '#FFFFFF',
-  canvas: '#F7FAF7',
+  canvas: '#F4F7F4',
 } as const;
 
 export const Colors = {
