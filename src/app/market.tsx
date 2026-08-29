@@ -19,7 +19,7 @@ import {
 } from '@/components/marketplace-ui';
 import { VoiceCallModal } from '@/components/voice-call-modal';
 import { DeliveryTrackingModal } from '@/components/delivery-tracking-modal';
-import { CropScannerModal } from '@/components/crop-scanner-modal';
+import { CreateListingModal } from '@/components/create-listing-modal';
 import { BottomTabInset, MaxContentWidth, Palette } from '@/constants/theme';
 import { marketplaceService } from '@/services/marketplaceService';
 
@@ -36,7 +36,7 @@ export default function MarketScreen() {
   const [callRecipient, setCallRecipient] = useState({ name: 'Farmer / Seller', location: 'Ghana' });
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
   const [selectedProductForOrder, setSelectedProductForOrder] = useState<Product | null>(null);
-  const [showScannerModal, setShowScannerModal] = useState(false);
+  const [showCreateListingModal, setShowCreateListingModal] = useState(false);
 
   const { width } = useWindowDimensions();
   const columns = width >= 1000 ? 4 : width >= 700 ? 3 : 2;
@@ -79,12 +79,20 @@ export default function MarketScreen() {
               title="SupaFarm Market"
               subtitle="Verified fresh produce direct from growers across Ghana"
               right={
-                <Pressable onPress={() => setShowDeliveryModal(true)} style={styles.basketButton}>
-                  <MaterialCommunityIcons name="truck-delivery-outline" size={22} color={Palette.forest} />
-                  <View style={styles.basketCount}>
-                    <Text style={styles.basketCountText}>1</Text>
-                  </View>
-                </Pressable>
+                <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                  <Pressable
+                    onPress={() => setShowCreateListingModal(true)}
+                    style={styles.postButton}>
+                    <MaterialCommunityIcons name="plus" size={18} color={Palette.white} />
+                    <Text style={styles.postButtonText}>Sell Crop</Text>
+                  </Pressable>
+                  <Pressable onPress={() => setShowDeliveryModal(true)} style={styles.basketButton}>
+                    <MaterialCommunityIcons name="truck-delivery-outline" size={20} color={Palette.forest} />
+                    <View style={styles.basketCount}>
+                      <Text style={styles.basketCountText}>1</Text>
+                    </View>
+                  </Pressable>
+                </View>
               }
             />
 
@@ -92,7 +100,6 @@ export default function MarketScreen() {
               value={query}
               onChangeText={setQuery}
               placeholder="Search products, farms, or regions"
-              onFilterPress={() => setShowScannerModal(true)}
             />
 
             <ScrollView
@@ -111,7 +118,7 @@ export default function MarketScreen() {
 
             <View style={styles.resultsBar}>
               <View>
-                <Text style={styles.resultsTitle}>{visibleProducts.length} fresh listings</Text>
+                <Text style={styles.resultsTitle}>{visibleProducts.length} listings in database</Text>
                 <Text style={styles.resultsCopy}>Direct farmer contacts • Voice call ready</Text>
               </View>
               <Pressable
@@ -122,18 +129,31 @@ export default function MarketScreen() {
               </Pressable>
             </View>
 
-            <View style={styles.productGrid}>
-              {visibleProducts.map((product) => (
-                <View key={product.id} style={[styles.productCell, { width: cardWidth }]}>
-                  <ProductCard
-                    product={product}
-                    style={styles.gridProductCard}
-                    onCall={() => handleStartCall(product.seller, product.location)}
-                    onOrder={() => handleStartOrder(product)}
-                  />
-                </View>
-              ))}
-            </View>
+            {visibleProducts.length > 0 ? (
+              <View style={styles.productGrid}>
+                {visibleProducts.map((product) => (
+                  <View key={product.id} style={[styles.productCell, { width: cardWidth }]}>
+                    <ProductCard
+                      product={product}
+                      style={styles.gridProductCard}
+                      onCall={() => handleStartCall(product.seller, product.location)}
+                      onOrder={() => handleStartOrder(product)}
+                    />
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.emptyBox}>
+                <MaterialCommunityIcons name="store-off-outline" size={32} color={Palette.muted} />
+                <Text style={styles.emptyTitle}>No crop listings found in database</Text>
+                <Text style={styles.emptyCopy}>There are currently no produce listings for this filter. Tap '+ Sell Crop' to post a listing!</Text>
+                <Pressable
+                  onPress={() => setShowCreateListingModal(true)}
+                  style={styles.emptyBtn}>
+                  <Text style={styles.emptyBtnText}>Post Crop Listing</Text>
+                </Pressable>
+              </View>
+            )}
 
             <View style={styles.assurance}>
               <MaterialCommunityIcons name="shield-check" size={28} color={Palette.emerald} />
@@ -165,9 +185,12 @@ export default function MarketScreen() {
         amount={selectedProductForOrder?.price}
       />
 
-      <CropScannerModal
-        visible={showScannerModal}
-        onClose={() => setShowScannerModal(false)}
+      <CreateListingModal
+        visible={showCreateListingModal}
+        onClose={() => setShowCreateListingModal(false)}
+        onSuccess={(newProduct) => {
+          setProductsList((prev) => [newProduct, ...prev]);
+        }}
       />
     </View>
   );
@@ -189,8 +212,22 @@ const styles = StyleSheet.create({
     maxWidth: MaxContentWidth,
     alignSelf: 'center',
     paddingHorizontal: 18,
-    paddingTop: 22,
+    paddingTop: 14,
     gap: 20,
+  },
+  postButton: {
+    paddingHorizontal: 12,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: Palette.emerald,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  postButtonText: {
+    color: Palette.white,
+    fontSize: 12,
+    fontWeight: '800',
   },
   basketButton: {
     width: 46,
@@ -267,6 +304,37 @@ const styles = StyleSheet.create({
   },
   gridProductCard: {
     width: '100%',
+  },
+  emptyBox: {
+    padding: 30,
+    borderRadius: 16,
+    backgroundColor: Palette.white,
+    borderWidth: 1,
+    borderColor: Palette.line,
+    alignItems: 'center',
+    gap: 8,
+  },
+  emptyTitle: {
+    color: Palette.ink,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  emptyCopy: {
+    color: Palette.muted,
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  emptyBtn: {
+    marginTop: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: Palette.emerald,
+  },
+  emptyBtnText: {
+    color: Palette.white,
+    fontSize: 13,
+    fontWeight: '800',
   },
   assurance: {
     padding: 18,

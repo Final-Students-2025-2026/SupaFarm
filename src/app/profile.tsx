@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/marketplace-ui';
 import { AuthModal } from '@/components/auth-modal';
 import { DeliveryTrackingModal } from '@/components/delivery-tracking-modal';
+import { CreateListingModal } from '@/components/create-listing-modal';
 import { BottomTabInset, MaxContentWidth, Palette } from '@/constants/theme';
 import { authService, type Profile } from '@/services/authService';
 import { orderService, type OrderRecord } from '@/services/orderService';
@@ -14,6 +15,7 @@ export default function ProfileScreen() {
   const [notifications, setNotifications] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
+  const [showCreateListingModal, setShowCreateListingModal] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [orders, setOrders] = useState<OrderRecord[]>([]);
 
@@ -152,23 +154,23 @@ export default function ProfileScreen() {
               </View>
             </View>
 
-            {/* Switch Role Banner */}
-            <Pressable onPress={() => setShowAuthModal(true)} style={styles.sellerBanner}>
+            {/* Switch Role / Register / Post Produce Banner */}
+            <Pressable onPress={() => setShowCreateListingModal(true)} style={styles.sellerBanner}>
               <View style={styles.sellerIcon}>
-                <MaterialCommunityIcons name="tractor" size={27} color={Palette.white} />
+                <MaterialCommunityIcons name="store-plus" size={27} color={Palette.white} />
               </View>
               <View style={styles.sellerCopy}>
-                <Text style={styles.sellerTitle}>Switch Role / Register as Farmer</Text>
+                <Text style={styles.sellerTitle}>Post New Crop Listing</Text>
                 <Text style={styles.sellerText}>
-                  Set up your greenhouse telemetry, post fresh crops, and receive buyer calls.
+                  Publish your fresh harvest details, set your price per bag/crate, and receive direct buyer calls.
                 </Text>
               </View>
               <MaterialCommunityIcons name="arrow-right" size={21} color={Palette.white} />
             </Pressable>
 
             <Pressable onPress={() => setShowAuthModal(true)} style={styles.helpButton}>
-              <MaterialCommunityIcons name="shield-account-outline" size={20} color={Palette.emerald} />
-              <Text style={styles.helpText}>3-Step Sign-up & Account Security</Text>
+              <MaterialCommunityIcons name="account-sync-outline" size={20} color={Palette.emerald} />
+              <Text style={styles.helpText}>Sign Out / Switch Account Role</Text>
             </Pressable>
           </View>
         </ScrollView>
@@ -194,6 +196,14 @@ export default function ProfileScreen() {
       <DeliveryTrackingModal
         visible={showDeliveryModal}
         onClose={() => setShowDeliveryModal(false)}
+      />
+
+      <CreateListingModal
+        visible={showCreateListingModal}
+        onClose={() => setShowCreateListingModal(false)}
+        farmerName={profile?.full_name}
+        farmerLocation={profile?.address_text}
+        onSuccess={() => {}}
       />
     </View>
   );

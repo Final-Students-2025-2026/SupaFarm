@@ -3,6 +3,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,19 +21,13 @@ import {
   SectionHeading,
   type Product,
 } from '@/components/marketplace-ui';
-import {
-  ControlsGrid,
-  GreenhouseDetailCard,
-  HumidityChart,
-  TelemetryMetrics,
-} from '@/components/greenhouse-ui';
 import { VoiceCallModal } from '@/components/voice-call-modal';
 import { AuthModal } from '@/components/auth-modal';
 import { DeliveryTrackingModal } from '@/components/delivery-tracking-modal';
 import { CropScannerModal } from '@/components/crop-scanner-modal';
+import { CreateListingModal } from '@/components/create-listing-modal';
 import { BottomTabInset, MaxContentWidth, Palette } from '@/constants/theme';
-import { greenhouseService, type Greenhouse, type PlantRecord } from '@/services/greenhouseService';
-import { marketplaceService } from '@/services/marketplaceService';
+import { marketplaceService, type MarketPriceItem } from '@/services/marketplaceService';
 import { authService, type Profile } from '@/services/authService';
 
 const categories = [
@@ -46,22 +41,21 @@ const categories = [
 
 export default function HomeScreen() {
   const [query, setQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'smart' | 'plants'>('smart');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
   
   // API Dynamic States
-  const [greenhousesList, setGreenhousesList] = useState<Greenhouse[]>([]);
-  const [selectedGreenhouse, setSelectedGreenhouse] = useState<Greenhouse | null>(null);
   const [productsList, setProductsList] = useState<Product[]>([]);
-  const [plantsList, setPlantsList] = useState<PlantRecord[]>([]);
+  const [marketPrices, setMarketPrices] = useState<MarketPriceItem[]>([]);
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
 
-  // Modal States
+  // Modals
   const [showCallModal, setShowCallModal] = useState(false);
   const [callRecipient, setCallRecipient] = useState({ name: 'Farmer / Seller', location: 'Ghana' });
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
   const [selectedProductForOrder, setSelectedProductForOrder] = useState<Product | null>(null);
   const [showScannerModal, setShowScannerModal] = useState(false);
+  const [showCreateListingModal, setShowCreateListingModal] = useState(false);
 
   const { width } = useWindowDimensions();
   const isWide = width >= 820;
@@ -71,20 +65,23 @@ export default function HomeScreen() {
 
     // 1. Fetch User Profile
     authService.getCurrentProfile().then((prof) => {
-      if (mounted) setUserProfile(prof);
-    });
-
-    // 2. Fetch Greenhouses
-    greenhouseService.getGreenhouses().then((ghs) => {
-      if (mounted && ghs.length > 0) {
-        setGreenhousesList(ghs);
-        setSelectedGreenhouse(ghs[0]);
+      if (mounted) {
+        setUserProfile(prof);
+        // If not logged in on first start, trigger Auth modal
+        if (!prof) {
+          setShowAuthModal(true);
+        }
       }
     });
 
-    // 3. Fetch Crop Listings
+    // 2. Fetch Crop Listings
     marketplaceService.getCropListings().then((prods) => {
       if (mounted) setProductsList(prods);
+    });
+
+    // 3. Fetch Market Prices
+    marketplaceService.getMarketPrices().then((prices) => {
+      if (mounted) setMarketPrices(prices);
     });
 
     return () => {
@@ -92,21 +89,21 @@ export default function HomeScreen() {
     };
   }, []);
 
-  useEffect(() => {
-    if (selectedGreenhouse) {
-      greenhouseService.getPlants(selectedGreenhouse.id).then(setPlantsList);
-    }
-  }, [selectedGreenhouse]);
+  const refreshListings = () => {
+    marketplaceService.getCropListings(selectedCategory, query).then(setProductsList);
+  };
 
-  const visibleProducts = useMemo(
-    () =>
-      productsList.filter((product) =>
-        `${product.name} ${product.seller} ${product.location}`
-          .toLowerCase()
-          .includes(query.toLowerCase()),
-      ),
-    [productsList, query],
-  );
+  useEffect(() => {
+    refreshListings();
+  }, [selectedCategory, query]);
+
+  const visibleProducts = useMemo(() => {
+    return productsList.filter((product) =>
+      `${product.name} ${product.seller} ${product.location}`
+        .toLowerCase()
+        .includes(query.toLowerCase()),
+    );
+  }, [productsList, query]);
 
   const handleStartCall = (name: string, location: string) => {
     setCallRecipient({ name, location });
@@ -132,7 +129,7 @@ export default function HomeScreen() {
                 <Pressable onPress={() => setShowAuthModal(true)} style={styles.locationPill}>
                   <MaterialCommunityIcons name="map-marker" size={16} color={Palette.emerald} />
                   <View>
-                    <Text style={styles.locationLabel}>Delivering to</Text>
+                    <Text style={styles.locationLabel}>Location</Text>
                     <Text style={styles.locationValue}>
                       {userProfile?.address_text || 'Accra, Ghana'}
                     </Text>
@@ -140,20 +137,14 @@ export default function HomeScreen() {
                   <MaterialCommunityIcons name="chevron-down" size={17} color={Palette.muted} />
                 </Pressable>
                 <IconButton
-                  icon="line-scan"
-                  onPress={() => setShowScannerModal(true)}
-                  accessibilityLabel="Scan Crop AI"
-                />
-                <IconButton
-                  icon="bell-outline"
-                  badge
+                  icon="account-circle-outline"
                   onPress={() => setShowAuthModal(true)}
-                  accessibilityLabel="Notifications"
+                  accessibilityLabel="User Auth"
                 />
               </View>
             </View>
 
-            {/* Screen 1 Onboarding / Hero Banner */}
+            {/* Hero Marketplace Banner */}
             <View style={[styles.hero, isWide && styles.heroWide]}>
               <Image
                 source={require('@/assets/images/market/vegetables.jpg')}
@@ -163,179 +154,89 @@ export default function HomeScreen() {
               <View style={styles.heroOverlay} />
               <View style={[styles.heroContent, isWide && styles.heroContentWide]}>
                 <View style={styles.badgePill}>
-                  <MaterialCommunityIcons name="leaf" size={16} color={Palette.emerald} />
+                  <MaterialCommunityIcons name="sprout" size={18} color={Palette.emerald} />
                 </View>
 
-                <Text style={styles.heroTitle}>Manage Your Greenhouse</Text>
+                <Text style={styles.heroTitle}>SupaFarm Ghana</Text>
                 <Text style={styles.heroCopy}>
-                  SupaFarm is designed to empower Ghanaian farmers & buyers with greenhouse IoT telemetry, fresh crop listings, and direct voice trading.
+                  Direct produce trading between Ghanaian farmers & buyers. Wholesale crop listings, live market prices, and direct voice calls with no middlemen.
                 </Text>
 
-                <Pressable
-                  onPress={() => setShowAuthModal(true)}
-                  style={({ pressed }) => [styles.getStartedButton, pressed && styles.pressed]}>
-                  <Text style={styles.getStartedText}>Get Started</Text>
-                  <MaterialCommunityIcons name="arrow-right" size={18} color={Palette.white} />
-                </Pressable>
+                <View style={styles.heroBtnRow}>
+                  <Pressable
+                    onPress={() => {
+                      if (!userProfile) {
+                        setShowAuthModal(true);
+                      } else {
+                        setShowCreateListingModal(true);
+                      }
+                    }}
+                    style={({ pressed }) => [styles.sellButton, pressed && styles.pressed]}>
+                    <MaterialCommunityIcons name="plus" size={18} color={Palette.white} />
+                    <Text style={styles.sellButtonText}>Post Crop for Sale</Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => router.push('/market')}
+                    style={({ pressed }) => [styles.buyButton, pressed && styles.pressed]}>
+                    <Text style={styles.buyButtonText}>Buy Produce</Text>
+                    <MaterialCommunityIcons name="arrow-right" size={18} color={Palette.forestDark} />
+                  </Pressable>
+                </View>
               </View>
             </View>
 
-            {/* Screen 2 "Hello, Farmers" Greetings & Greenhouse Selector */}
-            <View style={styles.farmerGreetingSection}>
+            {/* User Greeting & Quick Stats */}
+            <View style={styles.greetingSection}>
               <View style={styles.greetingHeader}>
                 <View>
                   <Text style={styles.helloText}>
-                    Hello, {userProfile?.full_name ? userProfile.full_name.split(' ')[0] : 'Farmers'}
+                    Welcome, {userProfile?.full_name ? userProfile.full_name : 'Valued Trader'}!
                   </Text>
-                  <Text style={styles.dateSubText}>Sunday, 01 July 2030</Text>
+                  <Text style={styles.roleSubText}>
+                    {userProfile?.role === 'farmer' ? 'Verified Crop Farmer' : 'Registered Produce Buyer'} • {userProfile?.address_text || 'Ghana Market Hub'}
+                  </Text>
                 </View>
-                <Pressable onPress={() => setShowAuthModal(true)} style={styles.avatarIconBtn}>
-                  <MaterialCommunityIcons name="account-circle-outline" size={24} color={Palette.forestDark} />
-                </Pressable>
+
+                {userProfile ? (
+                  <Pressable
+                    onPress={() => setShowCreateListingModal(true)}
+                    style={styles.postProduceHeaderBtn}>
+                    <MaterialCommunityIcons name="store-plus" size={20} color={Palette.white} />
+                    <Text style={styles.postProduceHeaderBtnText}>+ Sell Produce</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable onPress={() => setShowAuthModal(true)} style={styles.loginPillBtn}>
+                    <Text style={styles.loginPillText}>Sign Up / Login</Text>
+                  </Pressable>
+                )}
               </View>
 
               <SearchField
                 value={query}
                 onChangeText={setQuery}
-                placeholder="Search produce, greenhouses, location..."
+                placeholder="Search tomatoes, maize, plantain, region, farmer..."
                 onFilterPress={() => setShowScannerModal(true)}
               />
-
-              <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionHeadingTitle}>Your Greenhouses</Text>
-                <View style={styles.placesTag}>
-                  <Text style={styles.placesTagText}>{greenhousesList.length} Places</Text>
-                </View>
-              </View>
-
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.greenhouseRow}>
-                {greenhousesList.map((gh) => (
-                  <Pressable
-                    key={gh.id}
-                    onPress={() => setSelectedGreenhouse(gh)}
-                    style={[
-                      styles.greenhouseListItem,
-                      selectedGreenhouse?.id === gh.id && styles.greenhouseListItemSelected,
-                    ]}>
-                    <Image source={gh.image || require('@/assets/images/market/vegetables.jpg')} style={styles.greenhouseListImg} contentFit="cover" />
-                    <View style={styles.greenhouseListOverlay} />
-                    <View style={styles.greenhouseListContent}>
-                      <View style={styles.plantsBadge}>
-                        <Text style={styles.plantsBadgeText}>{gh.plants_count} Plants</Text>
-                      </View>
-                      <Text style={styles.greenhouseListName}>{gh.name}</Text>
-                      <Text style={styles.greenhouseListLoc}>{gh.location}</Text>
-                    </View>
-                  </Pressable>
-                ))}
-              </ScrollView>
             </View>
 
-            {/* Screen 3 & 4 Greenhouse Telemetry & Plant Management */}
-            <View style={styles.telemetrySection}>
-              <GreenhouseDetailCard
-                greenhouse={selectedGreenhouse || undefined}
-                onOpenMap={() => setShowDeliveryModal(true)}
-              />
-
-              {/* Sub-Navigation Tabs: Smart Greenhouse | Plants */}
-              <View style={styles.tabSwitcherRow}>
-                <Pressable
-                  onPress={() => setActiveTab('smart')}
-                  style={[styles.tabChoice, activeTab === 'smart' && styles.tabChoiceActive]}>
-                  <Text style={[styles.tabChoiceText, activeTab === 'smart' && styles.tabChoiceTextActive]}>
-                    Smart Greenhouse
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setActiveTab('plants')}
-                  style={[styles.tabChoice, activeTab === 'plants' && styles.tabChoiceActive]}>
-                  <Text style={[styles.tabChoiceText, activeTab === 'plants' && styles.tabChoiceTextActive]}>
-                    Plants
-                  </Text>
-                </Pressable>
-              </View>
-
-              {activeTab === 'smart' ? (
-                <>
-                  {/* Telemetry Control Cards */}
-                  <ControlsGrid greenhouse={selectedGreenhouse || undefined} />
-
-                  {/* Growth Metrics */}
-                  <TelemetryMetrics greenhouse={selectedGreenhouse || undefined} />
-
-                  {/* Condition Information Card */}
-                  <View style={styles.infoSummaryBox}>
-                    <Text style={styles.infoSummaryTitle}>Information</Text>
-                    <Text style={styles.infoSummaryCopy}>
-                      The condition of the plants has started to improve compared to yesterday, now they are starting to bear fruit.
-                    </Text>
-                  </View>
-
-                  {/* Humidity Trend Chart */}
-                  <HumidityChart greenhouseId={selectedGreenhouse?.id} />
-                </>
-              ) : (
-                /* Screen 4 Plants Stage & List */
-                <View style={styles.plantsTabList}>
-                  {plantsList.map((plant) => (
-                    <View
-                      key={plant.id}
-                      style={[
-                        styles.plantCard,
-                        plant.id === 'p3' && styles.plantCardActiveDark,
-                      ]}>
-                      <Image source={plant.image} style={styles.plantThumb} contentFit="cover" />
-                      <View style={styles.plantInfo}>
-                        <View
-                          style={[
-                            styles.stagePill,
-                            plant.stage === 'Reproductive'
-                              ? styles.stageOrange
-                              : styles.stageTeal,
-                          ]}>
-                          <Text style={styles.stagePillText}>{plant.stage}</Text>
-                        </View>
-                        <Text
-                          style={[
-                            styles.plantTitle,
-                            plant.id === 'p3' && styles.textWhite,
-                          ]}>
-                          {plant.name}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.plantSub,
-                            plant.id === 'p3' && styles.textMutedLight,
-                          ]}>
-                          {plant.count} • {plant.price}
-                        </Text>
-                      </View>
-                      <Pressable
-                        onPress={() => handleStartCall(selectedGreenhouse?.name || 'Farmer', selectedGreenhouse?.location || 'Ghana')}
-                        style={styles.plantCallBtn}>
-                        <MaterialCommunityIcons name="phone" size={18} color={Palette.white} />
-                      </Pressable>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </View>
-
-            {/* Marketplace Produce Section */}
+            {/* Produce Categories */}
             <View style={styles.section}>
               <SectionHeading
-                title="Shop by category"
-                action="View all"
-                onAction={() => router.push('/explore')}
+                title="Shop by Crop Category"
+                action={selectedCategory === 'All' ? 'View all' : 'Reset'}
+                onAction={() => setSelectedCategory('All')}
               />
               <View style={styles.categoryGrid}>
                 {categories.map((category) => (
                   <Pressable
                     key={category.name}
-                    onPress={() => router.push('/market')}
+                    onPress={() =>
+                      setSelectedCategory(selectedCategory === category.name ? 'All' : category.name)
+                    }
                     style={({ pressed }) => [
                       styles.categoryItem,
+                      selectedCategory === category.name && styles.categoryItemActive,
                       isWide && styles.categoryItemWide,
                       pressed && styles.pressed,
                     ]}>
@@ -352,12 +253,25 @@ export default function HomeScreen() {
               </View>
             </View>
 
+            {/* Crop Marketplace Feed */}
             <View style={styles.section}>
-              <SectionHeading
-                title={query ? `Results (${visibleProducts.length})` : 'Fresh near you'}
-                action="See market"
-                onAction={() => router.push('/market')}
-              />
+              <View style={styles.feedHeaderRow}>
+                <View>
+                  <Text style={styles.feedTitle}>
+                    {query ? `Results for "${query}"` : 'Fresh Produce Listings'}
+                  </Text>
+                  <Text style={styles.feedSub}>
+                    Direct farmer phone numbers • Voice trade enabled
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => setShowCreateListingModal(true)}
+                  style={styles.inlineAddBtn}>
+                  <MaterialCommunityIcons name="plus-circle-outline" size={18} color={Palette.emerald} />
+                  <Text style={styles.inlineAddBtnText}>Add Crop</Text>
+                </Pressable>
+              </View>
+
               {visibleProducts.length > 0 ? (
                 <ScrollView
                   horizontal
@@ -374,35 +288,57 @@ export default function HomeScreen() {
                 </ScrollView>
               ) : (
                 <View style={styles.emptyState}>
-                  <MaterialCommunityIcons name="magnify-close" size={28} color={Palette.muted} />
-                  <Text style={styles.emptyTitle}>No produce found</Text>
-                  <Text style={styles.emptyCopy}>Try another product, seller, or location.</Text>
+                  <MaterialCommunityIcons name="magnify-close" size={32} color={Palette.muted} />
+                  <Text style={styles.emptyTitle}>No crop listings found</Text>
+                  <Text style={styles.emptyCopy}>Be the first farmer to post crops for sale in this category!</Text>
+                  <Pressable
+                    onPress={() => setShowCreateListingModal(true)}
+                    style={styles.emptyCreateBtn}>
+                    <Text style={styles.emptyCreateBtnText}>Post Crop Listing</Text>
+                  </Pressable>
                 </View>
               )}
             </View>
 
-            {/* Market Pulse Banner */}
-            <View style={[styles.marketStrip, isWide && styles.marketStripWide]}>
-              <View style={styles.marketIcon}>
-                <MaterialCommunityIcons name="chart-line" size={26} color={Palette.white} />
+            {/* Wholesale Market Price Intelligence Strip */}
+            <View style={styles.section}>
+              <SectionHeading
+                title="Ghanaian Market Price Intelligence"
+                action="Explore markets"
+                onAction={() => router.push('/market')}
+              />
+              <View style={styles.marketPriceGrid}>
+                {marketPrices.map((mp, i) => (
+                  <View key={i} style={styles.priceCard}>
+                    <View style={styles.priceHeader}>
+                      <Text style={styles.priceCrop}>{mp.product}</Text>
+                      <View style={[styles.changePill, mp.up ? styles.bgGreen : styles.bgRed]}>
+                        <Text style={styles.changeText}>{mp.change}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.priceVal}>{mp.price}</Text>
+                    <Text style={styles.priceMarket}>{mp.market}</Text>
+                  </View>
+                ))}
               </View>
-              <View style={styles.marketCopy}>
-                <Text style={styles.marketEyebrow}>TODAY'S MARKET PULSE</Text>
-                <Text style={styles.marketTitle}>Know wholesale prices before you trade</Text>
-                <Text style={styles.marketText}>
-                  Compare daily Ghanaian market prices across Kumasi, Accra, Techiman, and Tamale.
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => router.push('/market')}
-                style={({ pressed }) => [styles.marketLink, pressed && styles.pressed]}>
-                <Text style={styles.marketLinkText}>View prices</Text>
-                <MaterialCommunityIcons name="arrow-right" size={18} color={Palette.white} />
-              </Pressable>
             </View>
           </View>
         </ScrollView>
       </SafeAreaView>
+
+      {/* Floating Sell Action Button */}
+      <Pressable
+        onPress={() => {
+          if (!userProfile) {
+            setShowAuthModal(true);
+          } else {
+            setShowCreateListingModal(true);
+          }
+        }}
+        style={styles.floatingSellBtn}>
+        <MaterialCommunityIcons name="store-plus" size={24} color={Palette.white} />
+        <Text style={styles.floatingSellText}>Sell Crop</Text>
+      </Pressable>
 
       {/* Modals */}
       <VoiceCallModal
@@ -416,7 +352,7 @@ export default function HomeScreen() {
         visible={showAuthModal}
         onClose={() => setShowAuthModal(false)}
         onSuccess={(u) => {
-          setUserProfile({
+          const newProf: Profile = {
             id: 'usr-new',
             role: u.role,
             account_type: u.accountType,
@@ -425,7 +361,9 @@ export default function HomeScreen() {
             address_text: u.location,
             latitude: 5.6037,
             longitude: -0.1870,
-          });
+          };
+          setUserProfile(newProf);
+          authService.updateProfile(newProf.id, newProf);
         }}
       />
 
@@ -438,9 +376,16 @@ export default function HomeScreen() {
         amount={selectedProductForOrder?.price}
       />
 
-      <CropScannerModal
-        visible={showScannerModal}
-        onClose={() => setShowScannerModal(false)}
+
+
+      <CreateListingModal
+        visible={showCreateListingModal}
+        onClose={() => setShowCreateListingModal(false)}
+        farmerName={userProfile?.full_name}
+        farmerLocation={userProfile?.address_text}
+        onSuccess={(newProduct) => {
+          setProductsList((prev) => [newProduct, ...prev]);
+        }}
       />
     </View>
   );
@@ -455,16 +400,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: BottomTabInset + 28,
+    paddingBottom: BottomTabInset + 60,
   },
   container: {
     width: '100%',
     maxWidth: MaxContentWidth,
     alignSelf: 'center',
     paddingHorizontal: 18,
+    paddingTop: 8,
   },
   topBar: {
     minHeight: 74,
+    paddingTop: Platform.OS === 'android' ? 10 : 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -498,7 +445,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   hero: {
-    minHeight: 280,
+    minHeight: 250,
     overflow: 'hidden',
     justifyContent: 'center',
     borderRadius: 20,
@@ -506,7 +453,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   heroWide: {
-    minHeight: 320,
+    minHeight: 280,
   },
   heroOverlay: {
     position: 'absolute',
@@ -514,277 +461,122 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     left: 0,
-    backgroundColor: 'rgba(9, 51, 34, 0.72)',
+    backgroundColor: 'rgba(9, 51, 34, 0.76)',
   },
   heroContent: {
-    maxWidth: 520,
-    padding: 24,
+    maxWidth: 540,
+    padding: 22,
   },
   heroContentWide: {
-    padding: 38,
+    padding: 34,
   },
   badgePill: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   heroTitle: {
     color: Palette.white,
-    fontSize: 32,
-    lineHeight: 38,
+    fontSize: 30,
+    lineHeight: 36,
     fontWeight: '900',
   },
   heroCopy: {
-    marginTop: 10,
+    marginTop: 8,
     color: '#D1E5D8',
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 19,
   },
-  getStartedButton: {
-    alignSelf: 'flex-start',
-    minHeight: 46,
-    marginTop: 20,
-    paddingHorizontal: 22,
+  heroBtnRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderRadius: 24,
-    backgroundColor: Palette.emerald,
+    gap: 12,
+    marginTop: 18,
   },
-  getStartedText: {
+  sellButton: {
+    height: 44,
+    paddingHorizontal: 18,
+    borderRadius: 22,
+    backgroundColor: Palette.emerald,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sellButtonText: {
     color: Palette.white,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '900',
   },
-  farmerGreetingSection: {
-    marginTop: 24,
-    gap: 16,
+  buyButton: {
+    height: 44,
+    paddingHorizontal: 18,
+    borderRadius: 22,
+    backgroundColor: Palette.white,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  buyButtonText: {
+    color: Palette.forestDark,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  greetingSection: {
+    marginTop: 22,
+    gap: 14,
   },
   greetingHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 10,
   },
   helloText: {
     color: Palette.forestDark,
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '900',
   },
-  dateSubText: {
+  roleSubText: {
     color: Palette.muted,
     fontSize: 12,
     marginTop: 2,
   },
-  avatarIconBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Palette.white,
-    borderWidth: 1,
-    borderColor: Palette.line,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  sectionHeadingTitle: {
-    color: Palette.ink,
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  placesTag: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+  postProduceHeaderBtn: {
+    paddingHorizontal: 14,
+    height: 40,
     borderRadius: 12,
-    backgroundColor: Palette.emeraldLight,
-  },
-  placesTagText: {
-    color: Palette.pillTeal,
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  greenhouseRow: {
-    gap: 12,
-    paddingRight: 10,
-  },
-  greenhouseListItem: {
-    width: 220,
-    height: 120,
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  greenhouseListItemSelected: {
-    borderColor: Palette.emerald,
-  },
-  greenhouseListImg: {
-    width: '100%',
-    height: '100%',
-  },
-  greenhouseListOverlay: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-  },
-  greenhouseListContent: {
-    position: 'absolute',
-    bottom: 12,
-    left: 12,
-    right: 12,
-  },
-  plantsBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    marginBottom: 6,
-  },
-  plantsBadgeText: {
-    color: Palette.white,
-    fontSize: 9,
-    fontWeight: '800',
-  },
-  greenhouseListName: {
-    color: Palette.white,
-    fontSize: 15,
-    fontWeight: '900',
-  },
-  greenhouseListLoc: {
-    color: '#D1D5DB',
-    fontSize: 11,
-    marginTop: 2,
-  },
-  telemetrySection: {
-    marginTop: 24,
-    gap: 16,
-  },
-  tabSwitcherRow: {
+    backgroundColor: Palette.forest,
     flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: Palette.line,
-    marginTop: 8,
+    alignItems: 'center',
+    gap: 6,
   },
-  tabChoice: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  tabChoiceActive: {
-    borderBottomColor: Palette.forestDark,
-  },
-  tabChoiceText: {
-    color: Palette.muted,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  tabChoiceTextActive: {
-    color: Palette.forestDark,
-    fontWeight: '900',
-  },
-  infoSummaryBox: {
-    marginTop: 16,
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: Palette.white,
-    borderWidth: 1,
-    borderColor: Palette.line,
-  },
-  infoSummaryTitle: {
-    color: Palette.ink,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  infoSummaryCopy: {
-    marginTop: 6,
-    color: Palette.muted,
+  postProduceHeaderBtnText: {
+    color: Palette.white,
     fontSize: 12,
-    lineHeight: 18,
-  },
-  plantsTabList: {
-    gap: 12,
-    marginTop: 14,
-  },
-  plantCard: {
-    padding: 12,
-    borderRadius: 16,
-    backgroundColor: Palette.white,
-    borderWidth: 1,
-    borderColor: Palette.line,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  plantCardActiveDark: {
-    backgroundColor: Palette.forestCard,
-    borderColor: Palette.forestDark,
-  },
-  plantThumb: {
-    width: 60,
-    height: 60,
-    borderRadius: 12,
-  },
-  plantInfo: {
-    flex: 1,
-  },
-  stagePill: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-    marginBottom: 4,
-  },
-  stageOrange: {
-    backgroundColor: '#FFEDD5',
-  },
-  stageTeal: {
-    backgroundColor: Palette.emeraldLight,
-  },
-  stagePillText: {
-    color: Palette.forestDark,
-    fontSize: 10,
     fontWeight: '800',
   },
-  plantTitle: {
-    color: Palette.ink,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  plantSub: {
-    color: Palette.muted,
-    fontSize: 11,
-    marginTop: 2,
-  },
-  textWhite: {
-    color: Palette.white,
-  },
-  textMutedLight: {
-    color: '#9CA3AF',
-  },
-  plantCallBtn: {
-    width: 38,
+  loginPillBtn: {
+    paddingHorizontal: 14,
     height: 38,
-    borderRadius: 19,
-    backgroundColor: Palette.emerald,
+    borderRadius: 12,
+    backgroundColor: Palette.emeraldLight,
+    borderWidth: 1,
+    borderColor: Palette.emerald,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  loginPillText: {
+    color: Palette.pillTeal,
+    fontSize: 12,
+    fontWeight: '800',
   },
   section: {
-    marginTop: 28,
-    gap: 15,
+    marginTop: 24,
+    gap: 14,
   },
   categoryGrid: {
     flexDirection: 'row',
@@ -792,111 +584,174 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   categoryItem: {
-    minWidth: 102,
+    minWidth: 98,
     flexGrow: 1,
-    paddingVertical: 14,
+    paddingVertical: 12,
     paddingHorizontal: 8,
     alignItems: 'center',
-    gap: 9,
-    backgroundColor: Palette.white,
+    gap: 8,
     borderRadius: 14,
-    borderWidth: 1,
+    backgroundColor: Palette.white,
+    borderWidth: 1.5,
     borderColor: Palette.line,
   },
+  categoryItemActive: {
+    borderColor: Palette.emerald,
+    backgroundColor: Palette.mint,
+  },
   categoryItemWide: {
-    flexBasis: 140,
+    flexGrow: 0,
+    width: '15%',
   },
   categoryIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   categoryName: {
     color: Palette.ink,
     fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  feedHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  feedTitle: {
+    color: Palette.ink,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  feedSub: {
+    color: Palette.muted,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  inlineAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: Palette.mint,
+  },
+  inlineAddBtnText: {
+    color: Palette.forest,
+    fontSize: 12,
     fontWeight: '800',
   },
   productRow: {
     gap: 12,
-    paddingRight: 4,
+    paddingRight: 10,
   },
   emptyState: {
-    minHeight: 170,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Palette.white,
+    padding: 30,
     borderRadius: 16,
+    backgroundColor: Palette.white,
     borderWidth: 1,
     borderColor: Palette.line,
+    alignItems: 'center',
+    gap: 8,
   },
   emptyTitle: {
-    marginTop: 8,
     color: Palette.ink,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '800',
   },
   emptyCopy: {
-    marginTop: 4,
     color: Palette.muted,
     fontSize: 12,
+    textAlign: 'center',
   },
-  marketStrip: {
-    marginTop: 28,
-    padding: 20,
-    gap: 16,
-    borderRadius: 18,
-    backgroundColor: Palette.forestDark,
-  },
-  marketStripWide: {
-    paddingHorizontal: 28,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  marketIcon: {
-    width: 48,
-    height: 48,
+  emptyCreateBtn: {
+    marginTop: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
     borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
     backgroundColor: Palette.emerald,
   },
-  marketCopy: {
-    flex: 1,
-  },
-  marketEyebrow: {
-    color: Palette.emerald,
-    fontSize: 9,
-    fontWeight: '900',
-  },
-  marketTitle: {
-    marginTop: 4,
+  emptyCreateBtnText: {
     color: Palette.white,
-    fontSize: 18,
-    fontWeight: '900',
+    fontSize: 13,
+    fontWeight: '800',
   },
-  marketText: {
-    marginTop: 5,
-    color: '#D6E8DA',
-    fontSize: 12,
-    lineHeight: 18,
+  marketPriceGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
   },
-  marketLink: {
-    alignSelf: 'flex-start',
-    minHeight: 40,
-    paddingHorizontal: 16,
+  priceCard: {
+    flex: 1,
+    minWidth: 150,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: Palette.white,
+    borderWidth: 1,
+    borderColor: Palette.line,
+  },
+  priceHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Palette.emerald,
+    justifyContent: 'space-between',
   },
-  marketLinkText: {
-    color: Palette.white,
-    fontSize: 12,
+  priceCrop: {
+    color: Palette.ink,
+    fontSize: 13,
     fontWeight: '800',
+  },
+  changePill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  bgGreen: {
+    backgroundColor: Palette.emeraldLight,
+  },
+  bgRed: {
+    backgroundColor: '#FEE2E2',
+  },
+  changeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: Palette.ink,
+  },
+  priceVal: {
+    color: Palette.forestDark,
+    fontSize: 17,
+    fontWeight: '900',
+    marginTop: 6,
+  },
+  priceMarket: {
+    color: Palette.muted,
+    fontSize: 10,
+    marginTop: 3,
+  },
+  floatingSellBtn: {
+    position: 'absolute',
+    bottom: BottomTabInset + 16,
+    right: 20,
+    height: 52,
+    paddingHorizontal: 20,
+    borderRadius: 26,
+    backgroundColor: Palette.forest,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+  },
+  floatingSellText: {
+    color: Palette.white,
+    fontSize: 14,
+    fontWeight: '900',
   },
   pressed: {
     opacity: 0.7,

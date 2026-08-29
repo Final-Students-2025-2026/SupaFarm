@@ -26,12 +26,12 @@ export const marketplaceService = {
         return data.map((item) => ({
           id: item.id,
           name: item.title,
-          seller: item.profiles?.full_name || 'Farmer',
+          seller: item.profiles?.full_name || 'Ghanaian Farmer',
           location: item.profiles?.address_text || 'Ghana',
           price: `GH₵ ${item.price_ghc}`,
-          unit: item.unit,
+          unit: item.unit || 'per bag',
           rating: '5.0',
-          badge: item.badge || 'Fresh',
+          badge: item.badge || item.crop_type || 'Fresh Harvest',
           image: item.title.toLowerCase().includes('tomato')
             ? require('@/assets/images/market/tomatoes.jpg')
             : item.title.toLowerCase().includes('maize') || item.title.toLowerCase().includes('corn')
@@ -43,6 +43,7 @@ export const marketplaceService = {
       }
     } catch (e) {}
 
+    // No hardcoded static data — return empty list if DB has no records
     return [];
   },
 
@@ -69,7 +70,7 @@ export const marketplaceService = {
   },
 
   async createCropListing(newListing: {
-    farmerId: string;
+    farmerId?: string;
     title: string;
     cropType: string;
     unit: string;
@@ -79,12 +80,13 @@ export const marketplaceService = {
     try {
       const { error } = await supabase.from('crop_listings').insert([
         {
-          farmer_id: newListing.farmerId,
+          farmer_id: newListing.farmerId || null,
           title: newListing.title,
           crop_type: newListing.cropType,
           unit: newListing.unit,
           price_ghc: newListing.priceGhc,
           description: newListing.description,
+          badge: newListing.cropType || 'Fresh Harvest',
           status: 'available',
         },
       ]);

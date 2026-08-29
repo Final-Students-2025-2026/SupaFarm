@@ -94,7 +94,7 @@ export function AuthModal({
                   </View>
                   <View style={styles.roleInfo}>
                     <Text style={[styles.roleTitle, role === 'farmer' && styles.textForest]}>Farmer / Seller</Text>
-                    <Text style={styles.roleDesc}>Post fresh crops, manage greenhouse telemetry, receive buyer calls.</Text>
+                    <Text style={styles.roleDesc}>Post fresh crop listings, set prices, and receive direct buyer calls.</Text>
                   </View>
                   {role === 'farmer' && <MaterialCommunityIcons name="check-circle" size={22} color={Palette.emerald} />}
                 </Pressable>
@@ -150,6 +150,7 @@ export function AuthModal({
                       value={phone}
                       onChangeText={setPhone}
                       placeholder="+233 24 000 0000"
+                      placeholderTextColor="#8A958D"
                       keyboardType="phone-pad"
                       style={styles.textInput}
                     />
@@ -164,6 +165,7 @@ export function AuthModal({
                       value={password}
                       onChangeText={setPassword}
                       placeholder="••••••••"
+                      placeholderTextColor="#8A958D"
                       secureTextEntry
                       style={styles.textInput}
                     />
@@ -197,6 +199,7 @@ export function AuthModal({
                       value={fullName}
                       onChangeText={setFullName}
                       placeholder={role === 'farmer' ? 'Enter Farm / Business Name' : 'Enter Full Name'}
+                      placeholderTextColor="#8A958D"
                       style={styles.textInput}
                     />
                   </View>
@@ -210,6 +213,7 @@ export function AuthModal({
                       value={locationSearch}
                       onChangeText={setLocationSearch}
                       placeholder="Search town, market, or farm area..."
+                      placeholderTextColor="#8A958D"
                       style={styles.textInput}
                     />
                   </View>
@@ -223,6 +227,7 @@ export function AuthModal({
                       value={addressText}
                       onChangeText={setAddressText}
                       placeholder="Street name or landmark description..."
+                      placeholderTextColor="#8A958D"
                       style={styles.textInput}
                     />
                   </View>

@@ -5,7 +5,6 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Chip, InfoCard, ScreenHeader, SectionHeading } from '@/components/marketplace-ui';
-import { CropScannerModal } from '@/components/crop-scanner-modal';
 import { VoiceCallModal } from '@/components/voice-call-modal';
 import { BottomTabInset, MaxContentWidth, Palette } from '@/constants/theme';
 import { marketplaceService, type MarketPriceItem } from '@/services/marketplaceService';
@@ -15,7 +14,6 @@ const regions = ['Greater Accra', 'Ashanti', 'Eastern', 'Northern'];
 export default function DiscoverScreen() {
   const [region, setRegion] = useState(regions[0]);
   const [marketPrices, setMarketPrices] = useState<MarketPriceItem[]>([]);
-  const [showScannerModal, setShowScannerModal] = useState(false);
   const [showCallModal, setShowCallModal] = useState(false);
 
   useEffect(() => {
@@ -36,23 +34,9 @@ export default function DiscoverScreen() {
           contentContainerStyle={styles.scrollContent}>
           <View style={styles.container}>
             <ScreenHeader
-              title="Discover & Intelligence"
-              subtitle="Wholesale prices, crop diagnostics, and farm intelligence"
+              title="Market Intelligence"
+              subtitle="Wholesale prices across Ghanaian regional markets"
             />
-
-            {/* AI Crop Scanner CTA Banner */}
-            <Pressable onPress={() => setShowScannerModal(true)} style={styles.scannerBanner}>
-              <View style={styles.scannerIconWrap}>
-                <MaterialCommunityIcons name="line-scan" size={28} color={Palette.emerald} />
-              </View>
-              <View style={styles.scannerCopy}>
-                <Text style={styles.scannerTitle}>AI Crop Condition Diagnosis</Text>
-                <Text style={styles.scannerSub}>
-                  Scan leaf/fruit image to check health, yield maturity, and disease risk.
-                </Text>
-              </View>
-              <MaterialCommunityIcons name="camera" size={22} color={Palette.white} />
-            </Pressable>
 
             <ScrollView
               horizontal
@@ -182,10 +166,7 @@ export default function DiscoverScreen() {
         </ScrollView>
       </SafeAreaView>
 
-      <CropScannerModal
-        visible={showScannerModal}
-        onClose={() => setShowScannerModal(false)}
-      />
+
 
       <VoiceCallModal
         visible={showCallModal}

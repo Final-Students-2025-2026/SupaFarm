@@ -175,15 +175,16 @@ export function ProductCard({
               <Pressable
                 accessibilityLabel={`Call ${product.seller}`}
                 onPress={onCall}
-                style={styles.callButton}>
-                <MaterialCommunityIcons name="phone" size={16} color={Palette.white} />
+                style={({ pressed }) => [styles.callButton, pressed && styles.pressed]}>
+                <MaterialCommunityIcons name="phone" size={15} color={Palette.white} />
+                <Text style={styles.callBtnText}>Call</Text>
               </Pressable>
             )}
             <Pressable
               accessibilityLabel={`Order ${product.name}`}
               onPress={onOrder}
-              style={styles.addButton}>
-              <MaterialCommunityIcons name="plus" size={20} color={Palette.white} />
+              style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}>
+              <MaterialCommunityIcons name="cart-outline" size={17} color={Palette.forestDark} />
             </Pressable>
           </View>
         </View>
@@ -454,20 +455,34 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   callButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 7,
+    height: 34,
+    paddingHorizontal: 10,
+    borderRadius: 17,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 5,
     backgroundColor: Palette.emerald,
+    elevation: 2,
+    shadowColor: Palette.forestDark,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
+  },
+  callBtnText: {
+    color: Palette.white,
+    fontSize: 12,
+    fontWeight: '900',
   },
   addButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 7,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Palette.forest,
+    backgroundColor: Palette.paleMint,
+    borderWidth: 1,
+    borderColor: Palette.line,
   },
   screenHeader: {
     flexDirection: 'row',

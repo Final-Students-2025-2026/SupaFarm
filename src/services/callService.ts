@@ -16,7 +16,7 @@ export const callService = {
     const channelName = `call-room-${recipientPhone.replace(/[^0-9]/g, '')}-${Date.now()}`;
     const channel = supabase.channel(channelName);
 
-    channel.subscribe((status) => {
+    channel.subscribe((status: 'SUBSCRIBED' | 'TIMED_OUT' | 'CLOSED' | 'CHANNEL_ERROR') => {
       if (status === 'SUBSCRIBED') {
         channel.send({
           type: 'broadcast',
