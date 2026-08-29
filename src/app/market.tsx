@@ -5,6 +5,7 @@ import {
   Alert,
   Linking,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -57,8 +58,13 @@ export default function MarketScreen() {
     }
   }, [params.category]);
 
-  const refreshListings = () => {
-    marketplaceService.getCropListings(activeFilter, query).then(setProductsList);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const refreshListings = async () => {
+    setRefreshing(true);
+    const data = await marketplaceService.getCropListings(activeFilter, query);
+    setProductsList(data);
+    setRefreshing(false);
   };
 
   useEffect(() => {
@@ -112,7 +118,15 @@ export default function MarketScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}>
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={refreshListings}
+              colors={[Palette.emerald]}
+              tintColor={Palette.emerald}
+            />
+          }>
           <View style={styles.container}>
             <ScreenHeader
               title="SupaFarm Market"

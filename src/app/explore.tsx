@@ -1,11 +1,12 @@
 import { Image } from 'expo-image';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useEffect, useState } from 'react';
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BottomTabInset, MaxContentWidth, Palette } from '@/constants/theme';
 import { authService, type Profile } from '@/services/authService';
+import { InAppMapDirectionsModal } from '@/components/in-app-map-directions-modal';
 
 const FARM_PLACEHOLDER = require('@/assets/images/market/vegetables.jpg');
 
@@ -13,16 +14,23 @@ export default function DiscoverScreen() {
   const [farmers, setFarmers] = useState<Profile[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectedFarmerDirections, setSelectedFarmerDirections] = useState<Profile | null>(null);
+
+  const fetchFarmers = async () => {
+    const data = await authService.getFarmers();
+    setFarmers(data);
+    setLoading(false);
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchFarmers();
+    setRefreshing(false);
+  };
 
   useEffect(() => {
-    let mounted = true;
-    authService.getFarmers().then((data) => {
-      if (mounted) {
-        setFarmers(data);
-        setLoading(false);
-      }
-    });
-    return () => { mounted = false; };
+    fetchFarmers();
   }, []);
 
   const filtered = farmers.filter((f) =>
@@ -41,7 +49,15 @@ export default function DiscoverScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}>
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={[Palette.emerald]}
+              tintColor={Palette.emerald}
+            />
+          }>
           <View style={styles.container}>
 
             {/* Header */}
@@ -160,14 +176,9 @@ export default function DiscoverScreen() {
                         </Pressable>
 
                         <Pressable
-                          onPress={() => {
-                            const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
-                              farmer.address_text || 'Ghana'
-                            )}&travelmode=driving`;
-                            Linking.openURL(url);
-                          }}
+                          onPress={() => setSelectedFarmerDirections(farmer)}
                           style={styles.dirBtn}>
-                          <MaterialCommunityIcons name="google-maps" size={16} color={Palette.forest} />
+                          <MaterialCommunityIcons name="navigation-variant" size={16} color={Palette.forest} />
                           <Text style={styles.dirBtnText}>Directions</Text>
                         </Pressable>
                       </View>
@@ -180,6 +191,14 @@ export default function DiscoverScreen() {
         </ScrollView>
       </SafeAreaView>
 
+      <InAppMapDirectionsModal
+        visible={!!selectedFarmerDirections}
+        onClose={() => setSelectedFarmerDirections(null)}
+        originLocation="My Location"
+        originName="My Current Location"
+        destinationLocation={selectedFarmerDirections?.address_text || 'Ghana Farm'}
+        destinationName={selectedFarmerDirections?.full_name || 'Verified Farmer'}
+      />
     </View>
   );
 }

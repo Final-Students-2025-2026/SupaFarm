@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { Image } from 'expo-image';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { type Product } from '@/components/marketplace-ui';
 import { Palette } from '@/constants/theme';
+import { InAppMapDirectionsModal } from '@/components/in-app-map-directions-modal';
 
 export function ProductDetailModal({
   product,
@@ -18,6 +20,8 @@ export function ProductDetailModal({
   onCall?: (product: Product) => void;
   onOrder?: (product: Product) => void;
 }) {
+  const [showDirections, setShowDirections] = useState(false);
+
   if (!visible || !product) return null;
 
   const handleCallFarmer = () => {
@@ -93,14 +97,9 @@ export function ProductDetailModal({
                 </View>
               </View>
               <Pressable
-                onPress={() => {
-                  const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
-                    product.location || 'Ghana'
-                  )}&travelmode=driving`;
-                  Linking.openURL(url);
-                }}
+                onPress={() => setShowDirections(true)}
                 style={styles.dirBtn}>
-                <MaterialCommunityIcons name="google-maps" size={16} color={Palette.emerald} />
+                <MaterialCommunityIcons name="navigation-variant" size={16} color={Palette.emerald} />
                 <Text style={styles.dirBtnText}>Directions</Text>
               </Pressable>
             </View>
@@ -128,6 +127,15 @@ export function ProductDetailModal({
           </ScrollView>
         </View>
       </View>
+
+      <InAppMapDirectionsModal
+        visible={showDirections}
+        onClose={() => setShowDirections(false)}
+        originLocation="My Location"
+        originName="My Current Location"
+        destinationLocation={product.location}
+        destinationName={product.seller}
+      />
     </Modal>
   );
 }

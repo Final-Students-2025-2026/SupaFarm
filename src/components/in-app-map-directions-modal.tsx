@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -15,8 +16,8 @@ export function InAppMapDirectionsModal({
   onClose,
   originLocation = 'Accra, Ghana',
   destinationLocation = 'Techiman Market, Bono East Region, Ghana',
-  originName = 'Seller Farm Location',
-  destinationName = 'Buyer Delivery Location',
+  originName = 'Farmer Location',
+  destinationName = 'Client / Buyer Location',
 }: {
   visible: boolean;
   onClose: () => void;
@@ -30,6 +31,12 @@ export function InAppMapDirectionsModal({
   const [durationText, setDurationText] = useState('5 hrs 20 mins');
   const [routeSteps, setRouteSteps] = useState<RouteStep[]>([]);
   const [routeVia, setRouteVia] = useState('N6 / N1 Highway');
+  const [mapType, setMapType] = useState<'roadmap' | 'satellite' | 'hybrid'>('roadmap');
+  const [staticMapUrl, setStaticMapUrl] = useState<string | null>(null);
+
+  // GPS Coordinates for visual map display
+  const [originCoords, setOriginCoords] = useState<{ lat: number; lng: number }>({ lat: 5.6037, lng: -0.1870 });
+  const [destCoords, setDestCoords] = useState<{ lat: number; lng: number }>({ lat: 7.5828, lng: -1.9392 });
 
   useEffect(() => {
     if (!visible) return;
@@ -38,24 +45,43 @@ export function InAppMapDirectionsModal({
     setLoading(true);
 
     const fetchGoogleDirections = async () => {
+      const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+
       try {
-        const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
         if (apiKey) {
-          const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(
+          // Construct Google Maps Static Map Image with origin marker (green), destination marker (red), and polyline path
+          const mapUrl = `https://maps.googleapis.com/maps/api/staticmap?size=800x400&scale=2&maptype=${mapType}&markers=color:0x10b981|label:F|${encodeURIComponent(
+            originLocation
+          )}&markers=color:0xef4444|label:C|${encodeURIComponent(
+            destinationLocation
+          )}&path=color:0x10b981|weight:5|${encodeURIComponent(originLocation)}|${encodeURIComponent(
+            destinationLocation
+          )}&key=${apiKey}`;
+
+          setStaticMapUrl(mapUrl);
+
+          const directionsUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(
             originLocation
           )}&destination=${encodeURIComponent(destinationLocation)}&key=${apiKey}`;
 
-          const res = await fetch(url);
+          const res = await fetch(directionsUrl);
           const data = await res.json();
 
           if (mounted && data.status === 'OK' && data.routes && data.routes.length > 0) {
             const leg = data.routes[0].legs[0];
             setDistanceText(leg.distance.text);
             setDurationText(leg.duration.text);
-            setRouteVia(data.routes[0].summary || 'Ghana National Highway');
+            setRouteVia(data.routes[0].summary || 'N6 / N1 Ghana Highway');
+
+            if (leg.start_location) {
+              setOriginCoords({ lat: leg.start_location.lat, lng: leg.start_location.lng });
+            }
+            if (leg.end_location) {
+              setDestCoords({ lat: leg.end_location.lat, lng: leg.end_location.lng });
+            }
 
             const steps: RouteStep[] = leg.steps.map((s: any) => ({
-              instruction: s.html_instructions.replace(/<[^>]*>?/gm, ''), // strip HTML tags
+              instruction: s.html_instructions.replace(/<[^>]*>?/gm, ''),
               distance: s.distance.text,
               duration: s.duration.text,
             }));
@@ -66,29 +92,30 @@ export function InAppMapDirectionsModal({
         }
       } catch (e) {}
 
-      // Fallback Ghanaian route steps if offline or API key pending
+      // Fallback route steps if offline or API key pending
       if (mounted) {
+        setStaticMapUrl(null);
         setDistanceText('365 km');
         setDurationText('5 hrs 15 mins');
         setRouteVia('N6 Highway (Accra - Kumasi - Techiman)');
         setRouteSteps([
           {
-            instruction: `Head north from ${originLocation} on N6 Highway toward Suhum / Nsawam`,
+            instruction: `Start at ${originName} (${originLocation}) heading north on N6 Highway`,
             distance: '65 km',
             duration: '1 hr 10 mins',
           },
           {
-            instruction: 'Continue straight through Nkawkaw bypass toward Ejisu',
+            instruction: 'Continue along N6 Highway bypass through Suhum & Nkawkaw',
             distance: '140 km',
             duration: '2 hrs 05 mins',
           },
           {
-            instruction: 'Merge onto Kumasi Outer Ring Road toward Offinso / Techiman',
+            instruction: 'Merge onto Kumasi Ring Road toward Offinso / N10',
             distance: '95 km',
             duration: '1 hr 20 mins',
           },
           {
-            instruction: `Arrive at ${destinationLocation}`,
+            instruction: `Arrive at ${destinationName} (${destinationLocation})`,
             distance: '65 km',
             duration: '40 mins',
           },
@@ -102,7 +129,7 @@ export function InAppMapDirectionsModal({
     return () => {
       mounted = false;
     };
-  }, [visible, originLocation, destinationLocation]);
+  }, [visible, originLocation, destinationLocation, mapType]);
 
   if (!visible) return null;
 
@@ -113,8 +140,11 @@ export function InAppMapDirectionsModal({
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>
-              <MaterialCommunityIcons name="navigation-variant" size={22} color={Palette.emerald} />
-              <Text style={styles.headerTitle}>In-App Navigation & Route</Text>
+              <MaterialCommunityIcons name="google-maps" size={24} color={Palette.emerald} />
+              <View>
+                <Text style={styles.headerTitle}>Live Route & Map Directions</Text>
+                <Text style={styles.headerSub}>Farmer ↔ Client Navigation</Text>
+              </View>
             </View>
             <Pressable onPress={onClose} style={styles.closeBtn}>
               <MaterialCommunityIcons name="close" size={22} color={Palette.ink} />
@@ -122,55 +152,91 @@ export function InAppMapDirectionsModal({
           </View>
 
           <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-            {/* Interactive In-App Route Map Graphic */}
+            {/* Map Controls Header */}
+            <View style={styles.mapTypeBar}>
+              <Text style={styles.mapTypeLabel}>Map Layer:</Text>
+              <Pressable
+                onPress={() => setMapType('roadmap')}
+                style={[styles.mapTypeBtn, mapType === 'roadmap' && styles.mapTypeBtnActive]}>
+                <Text style={[styles.mapTypeBtnText, mapType === 'roadmap' && styles.mapTypeBtnTextActive]}>Roadmap</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setMapType('satellite')}
+                style={[styles.mapTypeBtn, mapType === 'satellite' && styles.mapTypeBtnActive]}>
+                <Text style={[styles.mapTypeBtnText, mapType === 'satellite' && styles.mapTypeBtnTextActive]}>Satellite</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setMapType('hybrid')}
+                style={[styles.mapTypeBtn, mapType === 'hybrid' && styles.mapTypeBtnActive]}>
+                <Text style={[styles.mapTypeBtnText, mapType === 'hybrid' && styles.mapTypeBtnTextActive]}>Hybrid</Text>
+              </Pressable>
+            </View>
+
+            {/* Interactive In-App Route Map Frame */}
             <View style={styles.mapFrame}>
-              {/* Map grid background pattern */}
-              <View style={styles.mapGridLineH1} />
-              <View style={styles.mapGridLineH2} />
-              <View style={styles.mapGridLineV1} />
-              <View style={styles.mapGridLineV2} />
+              {staticMapUrl ? (
+                <Image source={{ uri: staticMapUrl }} style={styles.staticMapImage} contentFit="cover" />
+              ) : (
+                <>
+                  {/* Interactive Styled Map Grid & Polylines */}
+                  <View style={styles.mapGridLineH1} />
+                  <View style={styles.mapGridLineH2} />
+                  <View style={styles.mapGridLineV1} />
+                  <View style={styles.mapGridLineV2} />
 
-              {/* Highway Route Polyline Graphic */}
-              <View style={styles.routePolyline} />
+                  {/* Highway Route Polyline Graphic */}
+                  <View style={styles.routePolyline} />
+                  <View style={styles.routePolylineGlow} />
 
-              {/* Pin 1: Origin (Farmer) */}
-              <View style={styles.originPinWrap}>
-                <View style={styles.originPin}>
-                  <MaterialCommunityIcons name="sprout" size={16} color={Palette.white} />
-                </View>
-                <Text style={styles.pinLabelText} numberOfLines={1}>{originName}</Text>
-              </View>
+                  {/* Pin 1: Origin (Farmer) */}
+                  <View style={styles.originPinWrap}>
+                    <View style={styles.originPin}>
+                      <MaterialCommunityIcons name="sprout" size={16} color={Palette.white} />
+                    </View>
+                    <View style={styles.pinBadgeGreen}>
+                      <Text style={styles.pinBadgeText}>FARMER</Text>
+                    </View>
+                    <Text style={styles.pinLabelText} numberOfLines={1}>{originName}</Text>
+                  </View>
 
-              {/* Animated Vehicle Courier */}
-              <View style={styles.courierPinWrap}>
-                <View style={styles.courierPin}>
-                  <MaterialCommunityIcons name="motorbike" size={16} color={Palette.forestDark} />
-                </View>
-              </View>
+                  {/* Animated Vehicle Courier */}
+                  <View style={styles.courierPinWrap}>
+                    <View style={styles.courierPin}>
+                      <MaterialCommunityIcons name="motorbike" size={16} color={Palette.forestDark} />
+                    </View>
+                  </View>
 
-              {/* Pin 2: Destination (Buyer) */}
-              <View style={styles.destPinWrap}>
-                <View style={styles.destPin}>
-                  <MaterialCommunityIcons name="map-marker" size={18} color={Palette.white} />
-                </View>
-                <Text style={styles.pinLabelText} numberOfLines={1}>{destinationName}</Text>
-              </View>
+                  {/* Pin 2: Destination (Client / Buyer) */}
+                  <View style={styles.destPinWrap}>
+                    <View style={styles.destPin}>
+                      <MaterialCommunityIcons name="account-location" size={18} color={Palette.white} />
+                    </View>
+                    <View style={styles.pinBadgeRed}>
+                      <Text style={styles.pinBadgeText}>CLIENT</Text>
+                    </View>
+                    <Text style={styles.pinLabelText} numberOfLines={1}>{destinationName}</Text>
+                  </View>
+                </>
+              )}
 
               {/* Live Distance Pill */}
               <View style={styles.mapInfoPill}>
-                <MaterialCommunityIcons name="google-maps" size={14} color={Palette.emerald} />
+                <MaterialCommunityIcons name="navigation-variant" size={14} color={Palette.emerald} />
                 <Text style={styles.mapInfoText}>
-                  {distanceText} • {durationText} ({routeVia})
+                  {distanceText} • {durationText} via {routeVia}
                 </Text>
               </View>
             </View>
 
-            {/* Address Summary Card */}
+            {/* GPS Coordinates & Address Details Card */}
             <View style={styles.addressCard}>
               <View style={styles.addressRow}>
                 <View style={[styles.dot, { backgroundColor: Palette.emerald }]} />
                 <View style={styles.addressCopy}>
-                  <Text style={styles.addrLabel}>ORIGIN (FARM / SELLER)</Text>
+                  <View style={styles.partyHeader}>
+                    <Text style={styles.addrLabel}>FARMER / SELLER LOCATION</Text>
+                    <Text style={styles.gpsCoords}>{originCoords.lat.toFixed(4)}° N, {Math.abs(originCoords.lng).toFixed(4)}° W</Text>
+                  </View>
                   <Text style={styles.addrTitle}>{originName}</Text>
                   <Text style={styles.addrSub}>{originLocation}</Text>
                 </View>
@@ -181,7 +247,10 @@ export function InAppMapDirectionsModal({
               <View style={styles.addressRow}>
                 <View style={[styles.dot, { backgroundColor: Palette.tomato }]} />
                 <View style={styles.addressCopy}>
-                  <Text style={styles.addrLabel}>DESTINATION (BUYER / DELIVERY)</Text>
+                  <View style={styles.partyHeader}>
+                    <Text style={styles.addrLabel}>CLIENT / BUYER LOCATION</Text>
+                    <Text style={styles.gpsCoords}>{destCoords.lat.toFixed(4)}° N, {Math.abs(destCoords.lng).toFixed(4)}° W</Text>
+                  </View>
                   <Text style={styles.addrTitle}>{destinationName}</Text>
                   <Text style={styles.addrSub}>{destinationLocation}</Text>
                 </View>
@@ -192,13 +261,13 @@ export function InAppMapDirectionsModal({
             <View style={styles.stepsSection}>
               <View style={styles.stepsHeader}>
                 <MaterialCommunityIcons name="format-list-checks" size={18} color={Palette.forest} />
-                <Text style={styles.stepsTitle}>Turn-by-Turn Driving Directions</Text>
+                <Text style={styles.stepsTitle}>Turn-by-Turn Route Instructions</Text>
               </View>
 
               {loading ? (
                 <View style={styles.loadingBox}>
                   <ActivityIndicator size="small" color={Palette.emerald} />
-                  <Text style={styles.loadingText}>Calculating Google Maps route…</Text>
+                  <Text style={styles.loadingText}>Loading route coordinates…</Text>
                 </View>
               ) : (
                 <View style={styles.stepsList}>
@@ -262,22 +331,62 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '900',
   },
+  headerSub: {
+    color: Palette.muted,
+    fontSize: 11,
+    marginTop: 1,
+  },
   closeBtn: {
     padding: 6,
   },
   body: {
     padding: 20,
-    gap: 16,
+    gap: 14,
+  },
+
+  // Map Layer Controls
+  mapTypeBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  mapTypeLabel: {
+    color: Palette.ink,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  mapTypeBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: Palette.canvas,
+    borderWidth: 1,
+    borderColor: Palette.line,
+  },
+  mapTypeBtnActive: {
+    backgroundColor: Palette.forest,
+    borderColor: Palette.forest,
+  },
+  mapTypeBtnText: {
+    color: Palette.ink,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  mapTypeBtnTextActive: {
+    color: Palette.white,
   },
 
   // Map Graphic Frame
   mapFrame: {
-    height: 180,
+    height: 220,
     borderRadius: 16,
     backgroundColor: '#0F2C1D',
     position: 'relative',
     overflow: 'hidden',
     justifyContent: 'center',
+  },
+  staticMapImage: {
+    ...StyleSheet.absoluteFillObject,
   },
   mapGridLineH1: {
     position: 'absolute',
@@ -311,35 +420,66 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: '15%',
     width: '70%',
-    height: 4,
-    borderRadius: 2,
+    height: 5,
+    borderRadius: 3,
     backgroundColor: Palette.emerald,
+    zIndex: 2,
+  },
+  routePolylineGlow: {
+    position: 'absolute',
+    left: '12%',
+    width: '76%',
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: 'rgba(16, 185, 129, 0.25)',
+    zIndex: 1,
   },
 
   originPinWrap: {
     position: 'absolute',
     left: 14,
     alignItems: 'center',
+    zIndex: 3,
   },
   originPin: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: Palette.forest,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: Palette.white,
   },
+  pinBadgeGreen: {
+    marginTop: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: Palette.emerald,
+  },
+  pinBadgeRed: {
+    marginTop: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: Palette.tomato,
+  },
+  pinBadgeText: {
+    color: Palette.white,
+    fontSize: 9,
+    fontWeight: '900',
+  },
   courierPinWrap: {
     position: 'absolute',
     left: '46%',
     alignItems: 'center',
+    zIndex: 3,
   },
   courierPin: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: Palette.sun,
     alignItems: 'center',
     justifyContent: 'center',
@@ -350,11 +490,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 14,
     alignItems: 'center',
+    zIndex: 3,
   },
   destPin: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: Palette.tomato,
     alignItems: 'center',
     justifyContent: 'center',
@@ -362,11 +503,11 @@ const styles = StyleSheet.create({
     borderColor: Palette.white,
   },
   pinLabelText: {
-    marginTop: 4,
+    marginTop: 2,
     color: Palette.white,
     fontSize: 9,
     fontWeight: '800',
-    maxWidth: 70,
+    maxWidth: 75,
     textAlign: 'center',
   },
   mapInfoPill: {
@@ -374,16 +515,22 @@ const styles = StyleSheet.create({
     bottom: 12,
     alignSelf: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    zIndex: 4,
   },
-  mapInfoText: {
-    color: Palette.forestDark,
-    fontSize: 11,
+  partyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  gpsCoords: {
+    color: Palette.emerald,
+    fontSize: 10,
     fontWeight: '800',
   },
 

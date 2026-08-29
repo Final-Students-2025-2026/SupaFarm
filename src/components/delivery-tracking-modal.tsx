@@ -242,6 +242,15 @@ export function DeliveryTrackingModal({
           </ScrollView>
         </View>
       </View>
+
+      <InAppMapDirectionsModal
+        visible={showDirections}
+        onClose={() => setShowDirections(false)}
+        originLocation={directionsOrigin}
+        originName={directionsOriginName}
+        destinationLocation={directionsDestination}
+        destinationName={directionsDestinationName}
+      />
     </Modal>
   );
 }

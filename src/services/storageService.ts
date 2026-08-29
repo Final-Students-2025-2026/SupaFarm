@@ -1,5 +1,24 @@
 import { supabase } from '@/lib/supabase';
 
+function readUriAsArrayBuffer(fileUri: string): Promise<ArrayBuffer> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.onload = function () {
+      if (xhr.response) {
+        resolve(xhr.response);
+      } else {
+        reject(new Error('Empty response ArrayBuffer'));
+      }
+    };
+    xhr.onerror = function () {
+      reject(new Error('Failed to read file URI as ArrayBuffer'));
+    };
+    xhr.responseType = 'arraybuffer';
+    xhr.open('GET', fileUri, true);
+    xhr.send(null);
+  });
+}
+
 export const storageService = {
   /**
    * Uploads an image file URI (from expo-image-picker) to Supabase Storage bucket 'supafarm-images'
@@ -14,17 +33,18 @@ export const storageService = {
         return fileUri;
       }
 
-      // Read file blob / arrayBuffer
-      const response = await fetch(fileUri);
-      const blob = await response.blob();
+      // Read file URI as ArrayBuffer (avoids 0-byte Blob issue in React Native)
+      const arrayBuffer = await readUriAsArrayBuffer(fileUri);
 
-      const fileExt = fileUri.split('.').pop() || 'jpg';
-      const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const fileExt = fileUri.split('.').pop()?.split('?')[0] || 'jpg';
+      const cleanExt = fileExt.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const mimeType = cleanExt === 'png' ? 'image/png' : cleanExt === 'webp' ? 'image/webp' : 'image/jpeg';
+      const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(2)}.${cleanExt || 'jpg'}`;
 
       const { data, error } = await supabase.storage
         .from('supafarm-images')
-        .upload(fileName, blob, {
-          contentType: `image/${fileExt === 'png' ? 'png' : 'jpeg'}`,
+        .upload(fileName, arrayBuffer, {
+          contentType: mimeType,
           upsert: true,
         });
 
