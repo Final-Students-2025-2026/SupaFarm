@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { storageService } from '@/services/storageService';
 
 export type UserRole = 'farmer' | 'buyer' | 'admin';
 export type AccountType = 'individual' | 'business';
@@ -53,6 +54,17 @@ export const authService = {
 
       const userId = authData?.user?.id || `usr-${Date.now()}`;
 
+      // Upload profile image & farm background to Supabase Storage bucket
+      let profileUrl = params.profileImageUrl;
+      let farmBgUrl = params.farmBackgroundImageUrl;
+
+      if (profileUrl && !profileUrl.startsWith('http')) {
+        profileUrl = await storageService.uploadImage(profileUrl, 'avatars');
+      }
+      if (farmBgUrl && !farmBgUrl.startsWith('http')) {
+        farmBgUrl = await storageService.uploadImage(farmBgUrl, 'farms');
+      }
+
       const newProfile: Profile = {
         id: userId,
         role: params.role,
@@ -62,8 +74,8 @@ export const authService = {
         address_text: params.locationSearch,
         latitude: params.latitude || 5.6037,
         longitude: params.longitude || -0.1870,
-        profile_image_url: params.profileImageUrl,
-        farm_background_image_url: params.farmBackgroundImageUrl,
+        profile_image_url: profileUrl,
+        farm_background_image_url: farmBgUrl,
       };
 
       const { data, error } = await supabase

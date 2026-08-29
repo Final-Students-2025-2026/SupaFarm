@@ -143,21 +143,11 @@ export default function HomeScreen() {
             <View style={styles.topBar}>
               <BrandMark />
               <View style={styles.topActions}>
-                <Pressable onPress={() => setShowAuthModal(true)} style={styles.locationPill}>
-                  <MaterialCommunityIcons name="map-marker" size={16} color={Palette.emerald} />
-                  <View>
-                    <Text style={styles.locationLabel}>Location</Text>
-                    <Text style={styles.locationValue}>
-                      {userProfile?.address_text || 'Accra, Ghana'}
-                    </Text>
-                  </View>
-                  <MaterialCommunityIcons name="chevron-down" size={17} color={Palette.muted} />
-                </Pressable>
-                <IconButton
-                  icon="account-circle-outline"
+                <Pressable
                   onPress={() => setShowAuthModal(true)}
-                  accessibilityLabel="User Auth"
-                />
+                  style={({ pressed }) => [styles.accountIconButton, pressed && styles.pressed]}>
+                  <MaterialCommunityIcons name="account-circle" size={28} color={Palette.forest} />
+                </Pressable>
               </View>
             </View>
 
@@ -428,6 +418,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  accountIconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Palette.white,
+    borderWidth: 1.5,
+    borderColor: Palette.line,
   },
   locationPill: {
     paddingHorizontal: 11,

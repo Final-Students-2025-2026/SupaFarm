@@ -141,7 +141,10 @@ export default function DiscoverScreen() {
 
                     {/* Card body */}
                     <View style={styles.cardBody}>
-                      <Text style={styles.farmerName}>{farmer.full_name}</Text>
+                      <View style={styles.farmerNameHeader}>
+                        <MaterialCommunityIcons name="account-tie" size={18} color={Palette.forest} />
+                        <Text style={styles.farmerName}>{farmer.full_name || 'Ghana Farmer'}</Text>
+                      </View>
                       {farmer.address_text ? (
                         <View style={styles.locationRow}>
                           <MaterialCommunityIcons name="map-marker" size={13} color={Palette.emerald} />
@@ -337,9 +340,14 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     gap: 8,
   },
+  farmerNameHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   farmerName: {
     color: Palette.ink,
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '900',
   },
   locationRow: {
