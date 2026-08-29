@@ -28,37 +28,6 @@ function formatDuration(minutes: number): string {
   return `${mins} mins`;
 }
 
-/** Decode a Google Maps encoded polyline string into lat/lng pairs. */
-function decodeGooglePolyline(encoded: string): { latitude: number; longitude: number }[] {
-  const pts: { latitude: number; longitude: number }[] = [];
-  let idx = 0, lat = 0, lng = 0;
-  while (idx < encoded.length) {
-    let b: number, shift = 0, result = 0;
-    do { b = encoded.charCodeAt(idx++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
-    lat += result & 1 ? ~(result >> 1) : result >> 1;
-    shift = 0; result = 0;
-    do { b = encoded.charCodeAt(idx++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
-    lng += result & 1 ? ~(result >> 1) : result >> 1;
-    pts.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
-  }
-  return pts;
-}
-
-// Dark "SupaFarm" map style for Google-provided maps (Android always, iOS only if
-// you force PROVIDER_GOOGLE — see notes below). Apple Maps on iOS ignores this.
-const darkMapStyle = [
-  { elementType: 'geometry', stylers: [{ color: Palette.forestDark }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: Palette.forestDark }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: Palette.mintDark }] },
-  { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: 'rgba(255,255,255,0.15)' }] },
-  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: Palette.forest }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: Palette.emerald }] },
-  { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: Palette.white }] },
-  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: Palette.forestCard }] },
-];
-
 export function InAppMapDirectionsModal({
   visible,
   onClose,
@@ -77,140 +46,120 @@ export function InAppMapDirectionsModal({
   const mapRef = useRef<MapView>(null);
   const [loading, setLoading] = useState(true);
   const [mapReady, setMapReady] = useState(false);
-  const [distanceText, setDistanceText] = useState('');
-  const [durationText, setDurationText] = useState('');
-  const [routeVia, setRouteVia] = useState('');
+  const [distanceText, setDistanceText] = useState('365 km');
+  const [durationText, setDurationText] = useState('5 hrs 20 mins');
+  const [routeVia, setRouteVia] = useState('N6 / N1 Ghana Highway');
 
   const [originCoords, setOriginCoords] = useState<{ lat: number; lng: number }>({ lat: 5.6037, lng: -0.187 });
   const [destCoords, setDestCoords] = useState<{ lat: number; lng: number }>({ lat: 7.5828, lng: -1.9392 });
   const [polylinePoints, setPolylinePoints] = useState<{ latitude: number; longitude: number }[]>([]);
 
-  // Reset on open
   useEffect(() => {
-    if (!visible) {
-      setMapReady(false);
-      setPolylinePoints([]);
-      setLoading(true);
-      return;
-    }
+    if (!visible) return;
 
     let mounted = true;
+    setLoading(true);
 
-    const fetchRoute = async () => {
+    const fetchDirections3Tier = async () => {
       try {
-        // ── Geocode both addresses via Nominatim ──────────────────────────────
         const getCoords = async (locName: string) => {
           try {
             const res = await fetch(
-              `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locName)}&format=json&limit=1&countrycodes=gh`,
+              `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
+                locName
+              )}&format=json&limit=1&countrycodes=gh`,
               { headers: { 'User-Agent': 'SupaFarmApp/1.0' } }
             );
             const data = await res.json();
-            if (data?.length > 0)
+            if (data && data.length > 0) {
               return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-          } catch (_) { }
+            }
+          } catch (e) { }
           return null;
         };
 
-        const origC = (await getCoords(originLocation)) ?? { lat: 5.6037, lng: -0.187 };
-        const destC = (await getCoords(destinationLocation)) ?? { lat: 7.5828, lng: -1.9392 };
+        const origC = (await getCoords(originLocation)) || { lat: 5.6037, lng: -0.187 };
+        const destC = (await getCoords(destinationLocation)) || { lat: 7.5828, lng: -1.9392 };
 
-        if (!mounted) return;
-        setOriginCoords(origC);
-        setDestCoords(destC);
+        if (mounted) {
+          setOriginCoords(origC);
+          setDestCoords(destC);
+        }
 
         let routePoints: { latitude: number; longitude: number }[] = [];
         let distance = '';
         let duration = '';
-        let viaRouteName = 'Ghana Highway';
+        let viaRouteName = 'Ghana National Highway';
 
-        // ── Tier 1: Google Directions REST API (real road polyline) ───────────
-        const googleKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
-        if (googleKey) {
-          try {
-            const url =
-              `https://maps.googleapis.com/maps/api/directions/json` +
-              `?origin=${origC.lat},${origC.lng}` +
-              `&destination=${destC.lat},${destC.lng}` +
-              `&mode=driving&key=${googleKey}`;
-            const res = await fetch(url);
-            const data = await res.json();
-            if (data.status === 'OK' && data.routes?.length > 0) {
-              const route = data.routes[0];
-              const leg = route.legs[0];
-              distance = leg.distance.text;
-              duration = leg.duration.text;
-              viaRouteName = route.summary || 'Ghana Highway';
-              // Decode the overview_polyline
-              routePoints = decodeGooglePolyline(route.overview_polyline.points);
+        // Tier 1: OSRM (free, real road geometry)
+        try {
+          const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${origC.lng},${origC.lat};${destC.lng},${destC.lat}?overview=full&geometries=geojson`;
+          const osrmRes = await fetch(osrmUrl);
+          const osrmData = await osrmRes.json();
+
+          if (osrmData.routes && osrmData.routes.length > 0) {
+            const osrmRoute = osrmData.routes[0];
+            if (osrmRoute.geometry?.coordinates && Array.isArray(osrmRoute.geometry.coordinates)) {
+              routePoints = osrmRoute.geometry.coordinates.map((pt: [number, number]) => ({
+                latitude: pt[1],
+                longitude: pt[0],
+              }));
             }
-          } catch (_) { }
-        }
+            const distKm = osrmRoute.distance / 1000;
+            const durMins = osrmRoute.duration / 60;
+            distance = `${distKm.toFixed(1)} km`;
+            duration = formatDuration(durMins);
+            viaRouteName = osrmRoute.legs[0]?.summary || 'Ghana National Highway';
+          }
+        } catch (err) { }
 
-        // ── Tier 2: OSRM (free, real GeoJSON road geometry) ──────────────────
-        if (routePoints.length === 0) {
-          try {
-            const url =
-              `https://router.project-osrm.org/route/v1/driving/` +
-              `${origC.lng},${origC.lat};${destC.lng},${destC.lat}` +
-              `?overview=full&geometries=geojson`;
-            const res = await fetch(url);
-            const data = await res.json();
-            if (data.routes?.length > 0) {
-              const r = data.routes[0];
-              if (Array.isArray(r.geometry?.coordinates)) {
-                routePoints = r.geometry.coordinates.map((pt: [number, number]) => ({
-                  latitude: pt[1],
-                  longitude: pt[0],
-                }));
-              }
-              const distKm = r.distance / 1000;
-              const durMins = r.duration / 60;
-              distance = `${distKm.toFixed(1)} km`;
-              duration = formatDuration(durMins);
-              viaRouteName = r.legs[0]?.summary || 'Ghana Highway';
-            }
-          } catch (_) { }
-        }
-
-        // ── Tier 3: Straight-line fallback ───────────────────────────────────
+        // Tier 2: Straight-line Haversine fallback
         if (routePoints.length === 0) {
           routePoints = [
             { latitude: origC.lat, longitude: origC.lng },
             { latitude: destC.lat, longitude: destC.lng },
           ];
-          const km = getHaversineDistance(origC.lat, origC.lng, destC.lat, destC.lng) * 1.25;
-          distance = `~${km.toFixed(1)} km`;
-          duration = `~${formatDuration((km / 35) * 60)}`;
-          viaRouteName = 'Direct Route';
+          const straightKm = getHaversineDistance(origC.lat, origC.lng, destC.lat, destC.lng);
+          const estDrivingKm = straightKm * 1.25;
+          const estMins = (estDrivingKm / 35) * 60;
+          distance = `~${estDrivingKm.toFixed(1)} km`;
+          duration = `~${formatDuration(estMins)}`;
+          viaRouteName = 'Direct Highway Route';
         }
 
-        if (!mounted) return;
-        setPolylinePoints(routePoints);
-        setDistanceText(distance);
-        setDurationText(duration);
-        setRouteVia(viaRouteName);
-        setLoading(false);
-      } catch (_) {
+        if (mounted) {
+          setPolylinePoints(routePoints);
+          setDistanceText(distance);
+          setDurationText(duration);
+          setRouteVia(viaRouteName);
+          setLoading(false);
+
+          // Fit the real native map to the route once we have it
+          requestAnimationFrame(() => {
+            const coordsToFit =
+              routePoints.length > 1
+                ? routePoints
+                : [
+                  { latitude: origC.lat, longitude: origC.lng },
+                  { latitude: destC.lat, longitude: destC.lng },
+                ];
+            mapRef.current?.fitToCoordinates(coordsToFit, {
+              edgePadding: { top: 90, right: 60, bottom: 220, left: 60 },
+              animated: true,
+            });
+          });
+        }
+      } catch (err) {
         if (mounted) setLoading(false);
       }
     };
 
-    fetchRoute();
-    return () => { mounted = false; };
-  }, [visible, originLocation, destinationLocation]);
+    fetchDirections3Tier();
 
-  // Fit map ONLY after BOTH the map is rendered AND we have route points
-  useEffect(() => {
-    if (!mapReady || polylinePoints.length < 2) return;
-    const timer = setTimeout(() => {
-      mapRef.current?.fitToCoordinates(polylinePoints, {
-        edgePadding: { top: 100, right: 60, bottom: 240, left: 60 },
-        animated: true,
-      });
-    }, 400); // short delay lets MapView finish its initial render
-    return () => clearTimeout(timer);
-  }, [mapReady, polylinePoints]);
+    return () => {
+      mounted = false;
+    };
+  }, [visible, originLocation, destinationLocation]);
 
   if (!visible) return null;
 
@@ -237,12 +186,16 @@ export function InAppMapDirectionsModal({
             <MapView
               ref={mapRef}
               style={styles.map}
-              // Google provider gives consistent styling + Polyline rendering on
-              // Android by default. On iOS this requires a native Google Maps SDK
-              // key configured in app.json — omit PROVIDER_GOOGLE on iOS to use
-              // Apple Maps instead (customMapStyle will then be ignored there).
+              // No customMapStyle here on purpose: leaving mapType at its default
+              // "standard" gives the real Google Maps (Android) / Apple Maps (iOS)
+              // rendering — white background, every road class, POI icons, transit
+              // lines, building footprints, place labels — the actual detailed map,
+              // not a stripped-down themed skin.
               provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-              customMapStyle={Platform.OS === 'android' ? darkMapStyle : undefined}
+              mapType="standard"
+              showsCompass
+              showsScale={Platform.OS === 'android'}
+              showsBuildings
               initialRegion={{
                 latitude: (originCoords.lat + destCoords.lat) / 2,
                 longitude: (originCoords.lng + destCoords.lng) / 2,
@@ -270,13 +223,23 @@ export function InAppMapDirectionsModal({
               </Marker>
 
               {polylinePoints.length > 1 && (
-                <Polyline
-                  coordinates={polylinePoints}
-                  strokeColor={Palette.emerald}
-                  strokeWidth={6}
-                  lineCap="round"
-                  lineJoin="round"
-                />
+                <>
+                  {/* Halo pass: makes the route readable against real road/label detail */}
+                  <Polyline
+                    coordinates={polylinePoints}
+                    strokeColor="rgba(255,255,255,0.9)"
+                    strokeWidth={11}
+                    lineCap="round"
+                    lineJoin="round"
+                  />
+                  <Polyline
+                    coordinates={polylinePoints}
+                    strokeColor={Palette.emerald}
+                    strokeWidth={6}
+                    lineCap="round"
+                    lineJoin="round"
+                  />
+                </>
               )}
             </MapView>
 
@@ -394,14 +357,14 @@ const styles = StyleSheet.create({
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: Palette.forestDark,
+    backgroundColor: '#f4f6f5',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
     zIndex: 20,
   },
   loadingText: {
-    color: Palette.paleMint,
+    color: Palette.forestDark,
     fontSize: 13,
     fontWeight: '700',
   },
