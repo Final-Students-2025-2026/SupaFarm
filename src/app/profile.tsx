@@ -352,19 +352,35 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     let mounted = true;
-    authService.getCurrentProfile().then((data) => {
-      if (mounted) {
-        setProfile(data);
-        setLoading(false);
-        if (data?.id) {
-          marketplaceService.getMyListings(data.id).then(setMyCrops);
-        }
-        orderService.getUserOrders(data?.id).then((ordRes) => {
-          if (mounted) setOrders(ordRes);
+
+    const handleProfileUpdate = (data: Profile | null) => {
+      if (!mounted) return;
+      setProfile(data);
+      setLoading(false);
+      if (data?.id && data.role === 'farmer') {
+        marketplaceService.getMyListings(data.id).then((crops) => {
+          if (mounted) setMyCrops(crops);
         });
+      } else {
+        setMyCrops([]);
       }
+      orderService.getUserOrders(data?.id).then((ordRes) => {
+        if (mounted) setOrders(ordRes);
+      });
+    };
+
+    const unsubscribe = authService.subscribeProfileChange((data) => {
+      handleProfileUpdate(data);
     });
-    return () => { mounted = false; };
+
+    authService.getCurrentProfile().then((data) => {
+      handleProfileUpdate(data);
+    });
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const handleSignOut = () => {

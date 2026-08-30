@@ -69,12 +69,16 @@ export default function MarketScreen() {
 
   useEffect(() => {
     let mounted = true;
+    const unsubscribe = authService.subscribeProfileChange((prof) => {
+      if (mounted) setUserProfile(prof);
+    });
     authService.getCurrentProfile().then((prof) => {
       if (mounted) setUserProfile(prof);
     });
     refreshListings();
     return () => {
       mounted = false;
+      unsubscribe();
     };
   }, [activeFilter, query]);
 
@@ -146,12 +150,14 @@ export default function MarketScreen() {
               subtitle="Verified fresh produce direct from growers across Ghana"
               right={
                 <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                  <Pressable
-                    onPress={handleOpenCreateListing}
-                    style={styles.postButton}>
-                    <MaterialCommunityIcons name="plus" size={18} color={Palette.white} />
-                    <Text style={styles.postButtonText}>Sell Crop</Text>
-                  </Pressable>
+                  {userProfile?.role === 'farmer' && (
+                    <Pressable
+                      onPress={handleOpenCreateListing}
+                      style={styles.postButton}>
+                      <MaterialCommunityIcons name="plus" size={18} color={Palette.white} />
+                      <Text style={styles.postButtonText}>Sell Crop</Text>
+                    </Pressable>
+                  )}
                   <Pressable onPress={() => setShowDeliveryModal(true)} style={styles.basketButton}>
                     <MaterialCommunityIcons name="truck-delivery-outline" size={20} color={Palette.forest} />
                     <View style={styles.basketCount}>
@@ -211,12 +217,14 @@ export default function MarketScreen() {
               <View style={styles.emptyBox}>
                 <MaterialCommunityIcons name="store-off-outline" size={32} color={Palette.muted} />
                 <Text style={styles.emptyTitle}>No crop listings found in database</Text>
-                <Text style={styles.emptyCopy}>There are currently no produce listings for this filter. Tap '+ Sell Crop' to post a listing!</Text>
-                <Pressable
-                  onPress={handleOpenCreateListing}
-                  style={styles.emptyBtn}>
-                  <Text style={styles.emptyBtnText}>Post Crop Listing</Text>
-                </Pressable>
+                <Text style={styles.emptyCopy}>There are currently no produce listings for this filter.</Text>
+                {userProfile?.role === 'farmer' && (
+                  <Pressable
+                    onPress={handleOpenCreateListing}
+                    style={styles.emptyBtn}>
+                    <Text style={styles.emptyBtnText}>Post Crop Listing</Text>
+                  </Pressable>
+                )}
               </View>
             )}
 

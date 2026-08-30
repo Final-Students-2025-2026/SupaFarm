@@ -67,29 +67,36 @@ export default function HomeScreen() {
   useEffect(() => {
     let mounted = true;
 
-    // 1. Fetch User Profile
+    // 1. Subscribe to Auth Profile changes (log in, sign up, sign out)
+    const unsubscribe = authService.subscribeProfileChange((prof) => {
+      if (mounted) {
+        setUserProfile(prof);
+      }
+    });
+
+    // 2. Fetch User Profile
     authService.getCurrentProfile().then((prof) => {
       if (mounted) {
         setUserProfile(prof);
-        // If not logged in on first start, trigger Auth modal
         if (!prof) {
           setShowAuthModal(true);
         }
       }
     });
 
-    // 2. Fetch Crop Listings
+    // 3. Fetch Crop Listings
     marketplaceService.getCropListings().then((prods) => {
       if (mounted) setProductsList(prods);
     });
 
-    // 3. Fetch Market Prices
+    // 4. Fetch Market Prices
     marketplaceService.getMarketPrices().then((prices) => {
       if (mounted) setMarketPrices(prices);
     });
 
     return () => {
       mounted = false;
+      unsubscribe();
     };
   }, []);
 
@@ -208,12 +215,14 @@ export default function HomeScreen() {
                 </Text>
 
                 <View style={styles.heroBtnRow}>
-                  <Pressable
-                    onPress={handleOpenCreateListing}
-                    style={({ pressed }) => [styles.sellButton, pressed && styles.pressed]}>
-                    <MaterialCommunityIcons name="plus" size={18} color={Palette.white} />
-                    <Text style={styles.sellButtonText}>Post Crop for Sale</Text>
-                  </Pressable>
+                  {userProfile?.role === 'farmer' && (
+                    <Pressable
+                      onPress={handleOpenCreateListing}
+                      style={({ pressed }) => [styles.sellButton, pressed && styles.pressed]}>
+                      <MaterialCommunityIcons name="plus" size={18} color={Palette.white} />
+                      <Text style={styles.sellButtonText}>Post Crop for Sale</Text>
+                    </Pressable>
+                  )}
 
                   <Pressable
                     onPress={() => router.push('/market')}
@@ -237,18 +246,18 @@ export default function HomeScreen() {
                   </Text>
                 </View>
 
-                {userProfile ? (
+                {userProfile?.role === 'farmer' ? (
                   <Pressable
                     onPress={handleOpenCreateListing}
                     style={styles.postProduceHeaderBtn}>
                     <MaterialCommunityIcons name="store-plus" size={18} color={Palette.white} />
                     <Text style={styles.postProduceHeaderBtnText}>+ Sell</Text>
                   </Pressable>
-                ) : (
+                ) : !userProfile ? (
                   <Pressable onPress={() => setShowAuthModal(true)} style={styles.loginPillBtn}>
                     <Text style={styles.loginPillText}>Sign In</Text>
                   </Pressable>
-                )}
+                ) : null}
               </View>
 
               <SearchField
@@ -311,12 +320,14 @@ export default function HomeScreen() {
                     style={({ pressed }) => [styles.refreshFeedBtn, pressed && styles.pressed]}>
                     <MaterialCommunityIcons name="refresh" size={18} color={Palette.forest} />
                   </Pressable>
-                  <Pressable
-                    onPress={handleOpenCreateListing}
-                    style={styles.inlineAddBtn}>
-                    <MaterialCommunityIcons name="plus-circle-outline" size={18} color={Palette.emerald} />
-                    <Text style={styles.inlineAddBtnText}>Add Crop</Text>
-                  </Pressable>
+                  {userProfile?.role === 'farmer' && (
+                    <Pressable
+                      onPress={handleOpenCreateListing}
+                      style={styles.inlineAddBtn}>
+                      <MaterialCommunityIcons name="plus-circle-outline" size={18} color={Palette.emerald} />
+                      <Text style={styles.inlineAddBtnText}>Add Crop</Text>
+                    </Pressable>
+                  )}
                 </View>
               </View>
 
@@ -338,11 +349,13 @@ export default function HomeScreen() {
                   <MaterialCommunityIcons name="magnify-close" size={32} color={Palette.muted} />
                   <Text style={styles.emptyTitle}>No crop listings found</Text>
                   <Text style={styles.emptyCopy}>Be the first farmer to post crops for sale in this category!</Text>
-                  <Pressable
-                    onPress={handleOpenCreateListing}
-                    style={styles.emptyCreateBtn}>
-                    <Text style={styles.emptyCreateBtnText}>Post Crop Listing</Text>
-                  </Pressable>
+                  {userProfile?.role === 'farmer' && (
+                    <Pressable
+                      onPress={handleOpenCreateListing}
+                      style={styles.emptyCreateBtn}>
+                      <Text style={styles.emptyCreateBtnText}>Post Crop Listing</Text>
+                    </Pressable>
+                  )}
                 </View>
               )}
             </View>
@@ -373,13 +386,15 @@ export default function HomeScreen() {
         </ScrollView>
       </SafeAreaView>
 
-      {/* Floating Sell Action Button */}
-      <Pressable
-        onPress={handleOpenCreateListing}
-        style={styles.floatingSellBtn}>
-        <MaterialCommunityIcons name="store-plus" size={24} color={Palette.white} />
-        <Text style={styles.floatingSellText}>Sell Crop</Text>
-      </Pressable>
+      {/* Floating Sell Action Button — farmers only */}
+      {userProfile?.role === 'farmer' && (
+        <Pressable
+          onPress={handleOpenCreateListing}
+          style={styles.floatingSellBtn}>
+          <MaterialCommunityIcons name="store-plus" size={24} color={Palette.white} />
+          <Text style={styles.floatingSellText}>Sell Crop</Text>
+        </Pressable>
+      )}
 
       {/* Modals */}
 

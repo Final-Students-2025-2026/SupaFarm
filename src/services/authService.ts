@@ -22,11 +22,22 @@ export type Profile = {
 const PROFILE_STORAGE_KEY = 'supafarm_profile';
 
 let currentProfileState: Profile | null = null;
+type ProfileChangeListener = (profile: Profile | null) => void;
+const profileListeners = new Set<ProfileChangeListener>();
+
+function notifyListeners(profile: Profile | null) {
+  profileListeners.forEach((listener) => {
+    try {
+      listener(profile);
+    } catch (_) {}
+  });
+}
 
 async function saveProfileToStorage(profile: Profile) {
   try {
     await AsyncStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
   } catch (_) {}
+  notifyListeners(profile);
 }
 
 async function loadProfileFromStorage(): Promise<Profile | null> {
@@ -38,6 +49,12 @@ async function loadProfileFromStorage(): Promise<Profile | null> {
 }
 
 export const authService = {
+  subscribeProfileChange(listener: ProfileChangeListener) {
+    profileListeners.add(listener);
+    return () => {
+      profileListeners.delete(listener);
+    };
+  },
   formatPhoneEmail(phone: string): string {
     const cleanPhone = phone.replace(/[^0-9]/g, '');
     return `${cleanPhone}@supafarm.local`;
@@ -267,5 +284,6 @@ export const authService = {
       await AsyncStorage.removeItem(PROFILE_STORAGE_KEY);
     } catch (_) {}
     supabase.auth.signOut().catch(() => {});
+    notifyListeners(null);
   },
 };
