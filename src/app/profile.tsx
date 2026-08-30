@@ -575,6 +575,7 @@ export default function ProfileScreen() {
           onClose={() => setSelectedDetailOrder(null)}
           onOrderUpdated={handleOrderUpdated}
           onOrderDeleted={handleOrderDeleted}
+          viewerRole="buyer"
         />
       </View>
     );
@@ -845,6 +846,7 @@ export default function ProfileScreen() {
         onClose={() => setSelectedDetailOrder(null)}
         onOrderUpdated={handleOrderUpdated}
         onOrderDeleted={handleOrderDeleted}
+        viewerRole={profile?.role === 'farmer' ? 'farmer' : 'buyer'}
       />
     </View>
   );
