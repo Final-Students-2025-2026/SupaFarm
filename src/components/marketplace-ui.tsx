@@ -23,6 +23,7 @@ export type Product = {
   rating: string;
   badge?: string;
   image: ImageSource;
+  farmer_id?: string;
 };
 
 export function BrandMark({ compact = false }: { compact?: boolean }) {

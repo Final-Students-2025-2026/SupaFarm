@@ -122,6 +122,19 @@ export default function HomeScreen() {
   };
 
   const handleStartOrder = (product: Product) => {
+    if (
+      userProfile &&
+      ((product.farmer_id && product.farmer_id === userProfile.id) ||
+        (product.seller &&
+          userProfile.full_name &&
+          product.seller.trim().toLowerCase() === userProfile.full_name.trim().toLowerCase()))
+    ) {
+      Alert.alert(
+        'Own Listing Order Restricted',
+        'You cannot place an order for your own crop listing. As the posting farmer, you are the seller of this produce.'
+      );
+      return;
+    }
     setSelectedProductForOrder(product);
     setShowDeliveryModal(true);
   };
@@ -163,7 +176,13 @@ export default function HomeScreen() {
               <BrandMark />
               <View style={styles.topActions}>
                 <Pressable
-                  onPress={() => setShowAuthModal(true)}
+                  onPress={() => {
+                    if (userProfile) {
+                      router.push('/profile');
+                    } else {
+                      setShowAuthModal(true);
+                    }
+                  }}
                   style={({ pressed }) => [styles.accountIconButton, pressed && styles.pressed]}>
                   <MaterialCommunityIcons name="account-circle" size={28} color={Palette.forest} />
                 </Pressable>
@@ -388,9 +407,15 @@ export default function HomeScreen() {
       <DeliveryTrackingModal
         visible={showDeliveryModal}
         onClose={() => setShowDeliveryModal(false)}
+        listingId={selectedProductForOrder?.id}
+        farmerId={selectedProductForOrder?.farmer_id}
+        buyerId={userProfile?.id}
+        buyerName={userProfile?.full_name || 'Guest Buyer'}
+        buyerPhone={userProfile?.phone_number || '+233 24 000 0000'}
         productName={selectedProductForOrder?.name}
         farmerName={selectedProductForOrder?.seller}
         farmerLocation={selectedProductForOrder?.location}
+        buyerLocation={userProfile?.address_text || 'Ghana'}
         amount={selectedProductForOrder?.price}
       />
 

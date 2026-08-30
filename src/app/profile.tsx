@@ -24,6 +24,7 @@ import { authService, type Profile } from '@/services/authService';
 import { marketplaceService, type CropListingRecord } from '@/services/marketplaceService';
 import { storageService } from '@/services/storageService';
 import { orderService, type OrderRecord } from '@/services/orderService';
+import { OrderDetailModal } from '@/components/order-detail-modal';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Edit Crop Modal (inline)
@@ -317,6 +318,7 @@ export default function ProfileScreen() {
   const [showCreateListingModal, setShowCreateListingModal] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [editingCrop, setEditingCrop] = useState<CropListingRecord | null>(null);
+  const [selectedDetailOrder, setSelectedDetailOrder] = useState<OrderRecord | null>(null);
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [orders, setOrders] = useState<OrderRecord[]>([]);
@@ -324,17 +326,26 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const handleOrderUpdated = (updated: OrderRecord) => {
+    setSelectedDetailOrder(updated);
+    setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
+  };
+
+  const handleOrderDeleted = (orderId: string) => {
+    setSelectedDetailOrder(null);
+    setOrders((prev) => prev.filter((o) => o.id !== orderId));
+  };
+
   const loadMyCrops = async (farmerId: string) => {
     const data = await marketplaceService.getMyListings(farmerId);
     setMyCrops(data);
   };
 
   const handleRefresh = async () => {
-    if (!profile?.id) return;
     setRefreshing(true);
     await Promise.all([
-      loadMyCrops(profile.id),
-      orderService.getUserOrders().then(setOrders),
+      profile?.id ? loadMyCrops(profile.id) : Promise.resolve(),
+      orderService.getUserOrders(profile?.id).then(setOrders),
     ]);
     setRefreshing(false);
   };
@@ -347,8 +358,10 @@ export default function ProfileScreen() {
         setLoading(false);
         if (data?.id) {
           marketplaceService.getMyListings(data.id).then(setMyCrops);
-          orderService.getUserOrders().then(setOrders);
         }
+        orderService.getUserOrders(data?.id).then((ordRes) => {
+          if (mounted) setOrders(ordRes);
+        });
       }
     });
     return () => { mounted = false; };
@@ -363,8 +376,8 @@ export default function ProfileScreen() {
         onPress: () => {
           authService.signOut();
           setProfile(null);
-          setOrders([]);
           setMyCrops([]);
+          orderService.getUserOrders().then(setOrders);
         },
       },
     ]);
@@ -405,24 +418,117 @@ export default function ProfileScreen() {
     ]);
   };
 
-  // ── Not logged in ──────────────────────────────────────────────────────────
+  // ── Guest view ─────────────────────────────────────────────────────────────
   if (!loading && !profile) {
     return (
       <View style={styles.screen}>
         <SafeAreaView style={styles.safeArea} edges={['top']}>
-          <View style={styles.loginWall}>
-            <View style={styles.loginIconWrap}>
-              <MaterialCommunityIcons name="sprout" size={44} color={Palette.emerald} />
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                colors={[Palette.emerald]}
+                tintColor={Palette.emerald}
+              />
+            }>
+            <View style={styles.container}>
+              {/* Guest Profile Header */}
+              <View style={styles.profileCard}>
+                <View style={styles.avatarWrap}>
+                  <View style={[styles.avatar, { backgroundColor: Palette.emerald }]}>
+                    <MaterialCommunityIcons name="account-outline" size={32} color={Palette.white} />
+                  </View>
+                </View>
+                <View style={styles.identity}>
+                  <Text style={styles.name}>Guest Trader</Text>
+                  <Text style={styles.phone}>Browsing without account</Text>
+                  <View style={styles.rolePill}>
+                    <Text style={styles.rolePillText}>Guest User</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Login Banner */}
+              <View style={styles.sellerBanner}>
+                <View style={styles.sellerIcon}>
+                  <MaterialCommunityIcons name="sprout" size={27} color={Palette.white} />
+                </View>
+                <View style={styles.sellerCopy}>
+                  <Text style={styles.sellerTitle}>Join SupaFarm</Text>
+                  <Text style={styles.sellerText}>
+                    Sign up or log in to post produce, manage cloud orders, and connect directly with Ghanaian farmers.
+                  </Text>
+                </View>
+                <Pressable onPress={() => setShowAuthModal(true)} style={styles.loginPillBtn}>
+                  <Text style={styles.loginPillText}>Sign Up</Text>
+                </Pressable>
+              </View>
+
+              {/* Stats */}
+              <View style={styles.statsRow}>
+                <View style={styles.stat}>
+                  <Text style={styles.statValue}>0</Text>
+                  <Text style={styles.statLabel}>My Crops</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.stat}>
+                  <Text style={styles.statValue}>{orders.length}</Text>
+                  <Text style={styles.statLabel}>Orders</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.stat}>
+                  <Text style={styles.statValue}>0</Text>
+                  <Text style={styles.statLabel}>Active</Text>
+                </View>
+              </View>
+
+              {/* My Orders */}
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>My Orders</Text>
+                <Text style={styles.sectionCount}>{orders.length}</Text>
+              </View>
+
+              {orders.length === 0 ? (
+                <View style={styles.emptyCard}>
+                  <MaterialCommunityIcons name="package-variant-closed" size={28} color={Palette.muted} />
+                  <Text style={styles.emptyText}>No orders placed yet. Browse the market to place your first produce order!</Text>
+                </View>
+              ) : (
+                <View style={styles.orderList}>
+                  {orders.map((order) => (
+                    <Pressable
+                      key={order.id}
+                      onPress={() => setSelectedDetailOrder(order)}
+                      style={({ pressed }) => [styles.orderRow, pressed && { backgroundColor: Palette.mint }]}>
+                      <View style={styles.orderIcon}>
+                        <MaterialCommunityIcons name="package-variant" size={20} color={Palette.emerald} />
+                      </View>
+                      <View style={styles.orderInfo}>
+                        <Text style={styles.orderTitle} numberOfLines={1}>
+                          {order.product_name || `Order #${order.id}`}
+                        </Text>
+                        <Text style={styles.orderStatus}>
+                          {order.farmer_name ? `${order.farmer_name} • ` : ''}
+                          {String(order.status ?? 'pending').replace('_', ' ')}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={styles.orderAmount}>
+                          GH₵ {Number(order.amount_ghc ?? 0).toFixed(2)}
+                        </Text>
+                        <Text style={{ fontSize: 10, color: Palette.muted, marginTop: 2, textTransform: 'capitalize' }}>
+                          {order.delivery_mode ? order.delivery_mode.replace('_', ' ') : 'COD'}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
             </View>
-            <Text style={styles.loginTitle}>Join SupaFarm</Text>
-            <Text style={styles.loginSub}>
-              Sign up or log in to access your profile, post produce, manage orders, and connect directly with Ghanaian farmers.
-            </Text>
-            <Pressable onPress={() => setShowAuthModal(true)} style={styles.loginBtn}>
-              <MaterialCommunityIcons name="account-plus" size={20} color={Palette.white} />
-              <Text style={styles.loginBtnText}>Sign Up / Log In</Text>
-            </Pressable>
-          </View>
+          </ScrollView>
         </SafeAreaView>
 
         <AuthModal
@@ -443,7 +549,16 @@ export default function ProfileScreen() {
             };
             setProfile(newProf);
             if (newProf.id && newProf.role === 'farmer') loadMyCrops(newProf.id);
+            orderService.getUserOrders(newProf.id).then(setOrders);
           }}
+        />
+
+        <OrderDetailModal
+          visible={!!selectedDetailOrder}
+          order={selectedDetailOrder}
+          onClose={() => setSelectedDetailOrder(null)}
+          onOrderUpdated={handleOrderUpdated}
+          onOrderDeleted={handleOrderDeleted}
         />
       </View>
     );
@@ -616,20 +731,31 @@ export default function ProfileScreen() {
             ) : (
               <View style={styles.orderList}>
                 {orders.map((order) => (
-                  <View key={order.id} style={styles.orderRow}>
+                  <Pressable
+                    key={order.id}
+                    onPress={() => setSelectedDetailOrder(order)}
+                    style={({ pressed }) => [styles.orderRow, pressed && { backgroundColor: Palette.mint }]}>
                     <View style={styles.orderIcon}>
                       <MaterialCommunityIcons name="package-variant" size={20} color={Palette.emerald} />
                     </View>
                     <View style={styles.orderInfo}>
-                      <Text style={styles.orderTitle}>{order.id.slice(0, 8)}…</Text>
+                      <Text style={styles.orderTitle} numberOfLines={1}>
+                        {order.product_name || `Order #${order.id}`}
+                      </Text>
                       <Text style={styles.orderStatus}>
+                        {order.farmer_name ? `${order.farmer_name} • ` : ''}
                         {String(order.status ?? 'pending').replace('_', ' ')}
                       </Text>
                     </View>
-                    <Text style={styles.orderAmount}>
-                      GH₵ {Number(order.amount_ghc ?? 0).toFixed(2)}
-                    </Text>
-                  </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={styles.orderAmount}>
+                        GH₵ {Number(order.amount_ghc ?? 0).toFixed(2)}
+                      </Text>
+                      <Text style={{ fontSize: 10, color: Palette.muted, marginTop: 2, textTransform: 'capitalize' }}>
+                        {order.delivery_mode ? order.delivery_mode.replace('_', ' ') : 'COD'}
+                      </Text>
+                    </View>
+                  </Pressable>
                 ))}
               </View>
             )}
@@ -695,6 +821,15 @@ export default function ProfileScreen() {
         onClose={() => setShowEditProfileModal(false)}
         onSaved={(updated) => setProfile(updated)}
       />
+
+      {/* Order Detail Modal */}
+      <OrderDetailModal
+        visible={!!selectedDetailOrder}
+        order={selectedDetailOrder}
+        onClose={() => setSelectedDetailOrder(null)}
+        onOrderUpdated={handleOrderUpdated}
+        onOrderDeleted={handleOrderDeleted}
+      />
     </View>
   );
 }
@@ -719,6 +854,8 @@ const styles = StyleSheet.create({
   loginSub: { color: Palette.muted, fontSize: 13, textAlign: 'center', lineHeight: 20 },
   loginBtn: { marginTop: 8, height: 52, paddingHorizontal: 32, borderRadius: 26, backgroundColor: Palette.forest, flexDirection: 'row', alignItems: 'center', gap: 10 },
   loginBtnText: { color: Palette.white, fontSize: 15, fontWeight: '900' },
+  loginPillBtn: { paddingHorizontal: 14, height: 38, borderRadius: 12, backgroundColor: Palette.emeraldLight, borderWidth: 1, borderColor: Palette.emerald, alignItems: 'center', justifyContent: 'center' },
+  loginPillText: { color: Palette.pillTeal, fontSize: 12, fontWeight: '800' },
 
   // Profile
   farmBanner: { height: 140, borderRadius: 16, overflow: 'hidden', backgroundColor: Palette.forestDark },

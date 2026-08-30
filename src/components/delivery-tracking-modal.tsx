@@ -1,31 +1,46 @@
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Palette } from '@/constants/theme';
 import { InAppMapDirectionsModal } from '@/components/in-app-map-directions-modal';
+import { orderService, type OrderRecord } from '@/services/orderService';
 
 export type DeliveryMode = 'self_pickup' | 'seller_delivery' | 'platform_delivery';
 
 export function DeliveryTrackingModal({
   visible,
   onClose,
+  listingId,
+  farmerId,
+  buyerId,
+  buyerName = 'Valued Buyer',
+  buyerPhone,
   productName = 'Fresh Produce',
   farmerName = 'Ghana Farmer',
   farmerLocation = 'Farm Location',
   buyerLocation = 'Registered Address',
   amount = 'GH₵ 0',
+  onOrderCreated,
 }: {
   visible: boolean;
   onClose: () => void;
+  listingId?: string;
+  farmerId?: string;
+  buyerId?: string;
+  buyerName?: string;
+  buyerPhone?: string;
   productName?: string;
   farmerName?: string;
   farmerLocation?: string;
   buyerLocation?: string;
   amount?: string;
+  onOrderCreated?: (order: OrderRecord) => void;
 }) {
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('platform_delivery');
   const [orderConfirmed, setOrderConfirmed] = useState(false);
+  const [confirmedOrder, setConfirmedOrder] = useState<OrderRecord | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [showDirections, setShowDirections] = useState(false);
   const [directionsOrigin, setDirectionsOrigin] = useState('');
   const [directionsOriginName, setDirectionsOriginName] = useState('');
@@ -40,8 +55,36 @@ export function DeliveryTrackingModal({
     setShowDirections(true);
   };
 
-  const handleConfirmOrder = () => {
-    setOrderConfirmed(true);
+  const handleConfirmOrder = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+
+    const baseAmount = parseFloat(amount.replace(/[^0-9.]/g, '')) || 0;
+    const deliveryFee = deliveryMode === 'platform_delivery' ? 35 : deliveryMode === 'seller_delivery' ? 25 : 0;
+    const totalGhc = baseAmount + deliveryFee;
+
+    const res = await orderService.createOrder({
+      listingId,
+      farmerId,
+      buyerId,
+      buyerName,
+      buyerPhone,
+      deliveryMode,
+      amountGhc: totalGhc,
+      productName,
+      farmerName,
+      farmerLocation,
+      buyerLocation,
+    });
+
+    setSubmitting(false);
+    if (res.order) {
+      setConfirmedOrder(res.order);
+      setOrderConfirmed(true);
+      if (onOrderCreated) {
+        onOrderCreated(res.order);
+      }
+    }
   };
 
   if (!visible) return null;
@@ -181,9 +224,18 @@ export function DeliveryTrackingModal({
                     <Text style={styles.summaryPrice}>{amount}</Text>
                   </View>
 
-                  <Pressable onPress={handleConfirmOrder} style={styles.confirmBtn}>
-                    <Text style={styles.confirmBtnText}>Confirm Order</Text>
-                    <MaterialCommunityIcons name="arrow-right" size={18} color={Palette.white} />
+                  <Pressable
+                    onPress={handleConfirmOrder}
+                    disabled={submitting}
+                    style={[styles.confirmBtn, submitting && { opacity: 0.7 }]}>
+                    {submitting ? (
+                      <ActivityIndicator size="small" color={Palette.white} />
+                    ) : (
+                      <>
+                        <Text style={styles.confirmBtnText}>Confirm Order</Text>
+                        <MaterialCommunityIcons name="arrow-right" size={18} color={Palette.white} />
+                      </>
+                    )}
                   </Pressable>
                 </View>
               </>
@@ -193,7 +245,9 @@ export function DeliveryTrackingModal({
                 <View style={styles.successBadge}>
                   <MaterialCommunityIcons name="check-circle" size={32} color={Palette.emerald} />
                   <Text style={styles.successTitle}>Order Placed Successfully!</Text>
-                  <Text style={styles.successSub}>Tracking ID: #SF-GH-89021</Text>
+                  <Text style={styles.successSub}>
+                    Tracking ID: #{confirmedOrder?.id || 'SF-GH-89021'}
+                  </Text>
                 </View>
 
                 <Text style={styles.timelineHeader}>Live Delivery Timeline</Text>

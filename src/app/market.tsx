@@ -92,6 +92,19 @@ export default function MarketScreen() {
   };
 
   const handleStartOrder = (product: Product) => {
+    if (
+      userProfile &&
+      ((product.farmer_id && product.farmer_id === userProfile.id) ||
+        (product.seller &&
+          userProfile.full_name &&
+          product.seller.trim().toLowerCase() === userProfile.full_name.trim().toLowerCase()))
+    ) {
+      Alert.alert(
+        'Own Listing Order Restricted',
+        'You cannot place an order for your own crop listing. As the posting farmer, you are the seller of this produce.'
+      );
+      return;
+    }
     setSelectedProductForOrder(product);
     setShowDeliveryModal(true);
   };
@@ -237,9 +250,15 @@ export default function MarketScreen() {
       <DeliveryTrackingModal
         visible={showDeliveryModal}
         onClose={() => setShowDeliveryModal(false)}
+        listingId={selectedProductForOrder?.id}
+        farmerId={selectedProductForOrder?.farmer_id}
+        buyerId={userProfile?.id}
+        buyerName={userProfile?.full_name || 'Guest Buyer'}
+        buyerPhone={userProfile?.phone_number || '+233 24 000 0000'}
         productName={selectedProductForOrder?.name}
         farmerName={selectedProductForOrder?.seller}
         farmerLocation={selectedProductForOrder?.location}
+        buyerLocation={userProfile?.address_text || 'Ghana'}
         amount={selectedProductForOrder?.price}
       />
 
