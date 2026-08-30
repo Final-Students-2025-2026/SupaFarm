@@ -102,12 +102,16 @@ export const orderService = {
     return { order: newOrder };
   },
 
-  async getUserOrders(userId?: string): Promise<OrderRecord[]> {
+  async getUserOrders(userId?: string, role?: 'farmer' | 'buyer' | 'admin'): Promise<OrderRecord[]> {
     let supabaseOrders: OrderRecord[] = [];
     try {
       let query = supabase.from('orders').select('*');
-      if (userId) {
-        query = query.or(`buyer_id.eq.${userId},farmer_id.eq.${userId}`);
+      if (userId && role === 'farmer') {
+        // Farmers see incoming orders on their listings
+        query = query.eq('farmer_id', userId);
+      } else if (userId) {
+        // Buyers (and guests with ID) see only their own placed orders
+        query = query.eq('buyer_id', userId);
       }
       const { data, error } = await query.order('created_at', { ascending: false });
 
@@ -116,7 +120,14 @@ export const orderService = {
       }
     } catch (e) {}
 
-    const localOrders = await getLocalOrders();
+    const allLocal = await getLocalOrders();
+
+    // Filter local orders by role too
+    const localOrders = allLocal.filter((o) => {
+      if (!userId) return true; // guest sees all local orders (no ID to match)
+      if (role === 'farmer') return o.farmer_id === userId;
+      return o.buyer_id === userId || (!o.buyer_id); // buyer sees their own + any guest-placed orders on this device
+    });
 
     // Merge supabase & local orders, deduplicating by ID
     const mergedMap = new Map<string, OrderRecord>();

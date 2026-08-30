@@ -120,34 +120,36 @@ export function OrderDetailModal({
               <View style={styles.statusBadge}>
                 <MaterialCommunityIcons name="clock-outline" size={16} color={Palette.forestDark} />
                 <Text style={styles.statusText}>
-                  STATUS: {String(order.status ?? 'pending').toUpperCase().replace('_', ' ')}
+                  STATUS: {String(order.status ?? 'pending').toUpperCase().replace(/_/g, ' ')}
                 </Text>
               </View>
               <Text style={styles.orderDate}>{formattedDate}</Text>
             </View>
 
-            {/* Status Selector */}
-            <View style={styles.sectionCard}>
-              <View style={styles.statusHeaderRow}>
-                <Text style={styles.sectionHeader}>UPDATE ORDER STATUS</Text>
-                {updatingStatus && <ActivityIndicator size="small" color={Palette.emerald} />}
+            {/* Status Selector — farmers only */}
+            {viewerRole === 'farmer' && (
+              <View style={styles.sectionCard}>
+                <View style={styles.statusHeaderRow}>
+                  <Text style={styles.sectionHeader}>UPDATE ORDER STATUS</Text>
+                  {updatingStatus && <ActivityIndicator size="small" color={Palette.emerald} />}
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statusRow}>
+                  {statuses.map((s) => {
+                    const isActive = order.status === s.key;
+                    return (
+                      <Pressable
+                        key={s.key}
+                        onPress={() => handleUpdateStatus(s.key)}
+                        style={[styles.statusChip, isActive && styles.statusChipActive]}>
+                        <Text style={[styles.statusChipText, isActive && styles.statusChipTextActive]}>
+                          {isActive ? `✓ ${s.label}` : s.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
               </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statusRow}>
-                {statuses.map((s) => {
-                  const isActive = order.status === s.key;
-                  return (
-                    <Pressable
-                      key={s.key}
-                      onPress={() => handleUpdateStatus(s.key)}
-                      style={[styles.statusChip, isActive && styles.statusChipActive]}>
-                      <Text style={[styles.statusChipText, isActive && styles.statusChipTextActive]}>
-                        {isActive ? `✓ ${s.label}` : s.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            </View>
+            )}
 
             {/* Produce Summary */}
             <View style={styles.sectionCard}>
@@ -180,63 +182,67 @@ export function OrderDetailModal({
               </View>
             </View>
 
-            {/* Seller & Farm Details */}
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionHeader}>SELLER / FARM DETAILS</Text>
-              <View style={styles.personRow}>
-                <View style={styles.personAvatar}>
-                  <MaterialCommunityIcons name="account-tie" size={22} color={Palette.forest} />
-                </View>
-                <View style={styles.personCopy}>
-                  <Text style={styles.personName}>{order.farmer_name || 'Verified SupaFarm Grower'}</Text>
-                  <Text style={styles.personSub}>
-                    <MaterialCommunityIcons name="map-marker" size={12} color={Palette.emerald} />
-                    {' '}{order.farmer_location || 'Farm Site, Ghana'}
-                  </Text>
-                </View>
-                <Pressable onPress={handleCallFarmer} style={styles.actionBtn}>
-                  <MaterialCommunityIcons name="phone" size={16} color={Palette.white} />
-                  <Text style={styles.actionBtnText}>Call</Text>
-                </Pressable>
-              </View>
-            </View>
-
-            {/* Buyer & Delivery Address */}
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionHeader}>DELIVERY DESTINATION (BUYER)</Text>
-              <View style={styles.personRow}>
-                <View style={[styles.personAvatar, { backgroundColor: Palette.paleMint }]}>
-                  <MaterialCommunityIcons name="account-box" size={22} color={Palette.emerald} />
-                </View>
-                <View style={styles.personCopy}>
-                  <Text style={styles.personName}>
-                    {order.buyer_name || (order.buyer_id ? 'Registered Account Buyer' : 'Guest Buyer')}
-                  </Text>
-                  {order.buyer_phone ? (
-                    <Text style={styles.personPhone}>
-                      <MaterialCommunityIcons name="phone-outline" size={11} color={Palette.forest} />
-                      {' '}{order.buyer_phone}
+            {/* Seller / Farm Details — shown to buyers only (not to the farmer themselves) */}
+            {viewerRole !== 'farmer' && (
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionHeader}>SELLER / FARM DETAILS</Text>
+                <View style={styles.personRow}>
+                  <View style={styles.personAvatar}>
+                    <MaterialCommunityIcons name="account-tie" size={22} color={Palette.forest} />
+                  </View>
+                  <View style={styles.personCopy}>
+                    <Text style={styles.personName}>{order.farmer_name || 'Verified SupaFarm Grower'}</Text>
+                    <Text style={styles.personSub}>
+                      <MaterialCommunityIcons name="map-marker" size={12} color={Palette.emerald} />
+                      {' '}{order.farmer_location || 'Farm Site, Ghana'}
                     </Text>
-                  ) : null}
-                  <Text style={styles.personSub}>
-                    <MaterialCommunityIcons name="map-marker" size={12} color={Palette.tomato} />
-                    {' '}{order.buyer_location || 'Accra, Ghana'}
-                  </Text>
-                </View>
-                <View style={{ gap: 6 }}>
-                  <Pressable onPress={handleCallBuyer} style={styles.actionBtn}>
-                    <MaterialCommunityIcons name="phone" size={14} color={Palette.white} />
-                    <Text style={styles.actionBtnText}>Call Buyer</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => setShowDirections(true)}
-                    style={styles.dirBtn}>
-                    <MaterialCommunityIcons name="navigation-variant" size={14} color={Palette.forest} />
-                    <Text style={styles.dirBtnText}>Directions</Text>
+                  </View>
+                  <Pressable onPress={handleCallFarmer} style={styles.actionBtn}>
+                    <MaterialCommunityIcons name="phone" size={16} color={Palette.white} />
+                    <Text style={styles.actionBtnText}>Call</Text>
                   </Pressable>
                 </View>
               </View>
-            </View>
+            )}
+
+            {/* Buyer & Delivery Address — shown to farmers only (not to the buyer themselves) */}
+            {viewerRole === 'farmer' && (
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionHeader}>DELIVERY DESTINATION (BUYER)</Text>
+                <View style={styles.personRow}>
+                  <View style={[styles.personAvatar, { backgroundColor: Palette.paleMint }]}>
+                    <MaterialCommunityIcons name="account-box" size={22} color={Palette.emerald} />
+                  </View>
+                  <View style={styles.personCopy}>
+                    <Text style={styles.personName}>
+                      {order.buyer_name || (order.buyer_id ? 'Registered Account Buyer' : 'Guest Buyer')}
+                    </Text>
+                    {order.buyer_phone ? (
+                      <Text style={styles.personPhone}>
+                        <MaterialCommunityIcons name="phone-outline" size={11} color={Palette.forest} />
+                        {' '}{order.buyer_phone}
+                      </Text>
+                    ) : null}
+                    <Text style={styles.personSub}>
+                      <MaterialCommunityIcons name="map-marker" size={12} color={Palette.tomato} />
+                      {' '}{order.buyer_location || 'Accra, Ghana'}
+                    </Text>
+                  </View>
+                  <View style={{ gap: 6 }}>
+                    <Pressable onPress={handleCallBuyer} style={styles.actionBtn}>
+                      <MaterialCommunityIcons name="phone" size={14} color={Palette.white} />
+                      <Text style={styles.actionBtnText}>Call Buyer</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setShowDirections(true)}
+                      style={styles.dirBtn}>
+                      <MaterialCommunityIcons name="navigation-variant" size={14} color={Palette.forest} />
+                      <Text style={styles.dirBtnText}>Directions</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            )}
 
           {/* Timeline */}
           <View style={styles.timelineCard}>
@@ -251,7 +257,7 @@ export function OrderDetailModal({
             <View style={styles.timelineItem}>
               <MaterialCommunityIcons name="clock-outline" size={18} color={Palette.sun} />
               <View style={styles.timelineTextWrap}>
-                <Text style={styles.timelineTitle}>Current Status: {String(order.status ?? 'pending').replace('_', ' ')}</Text>
+                <Text style={styles.timelineTitle}>Current Status: {String(order.status ?? 'pending').replace(/_/g, ' ')}</Text>
                 <Text style={styles.timelineTime}>Cash on delivery upon arrival</Text>
               </View>
             </View>
