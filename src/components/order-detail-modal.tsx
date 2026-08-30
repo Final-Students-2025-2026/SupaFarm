@@ -12,12 +12,16 @@ export function OrderDetailModal({
   onClose,
   onOrderUpdated,
   onOrderDeleted,
+  viewerRole = 'buyer',
 }: {
   order: OrderRecord | null;
   visible: boolean;
   onClose: () => void;
   onOrderUpdated?: (updated: OrderRecord) => void;
   onOrderDeleted?: (orderId: string) => void;
+  /** The role of the person currently viewing this order. Farmers can change status;
+   *  each viewer sees the OTHER party's contact info, not their own. */
+  viewerRole?: 'farmer' | 'buyer' | 'admin';
 }) {
   const [showDirections, setShowDirections] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
